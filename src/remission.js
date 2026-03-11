@@ -850,8 +850,8 @@ async function runStartMenu(options) {
   const mode = await selectWithArrows(
     [
       {
-        label: "Propose paths",
-        description: "Generate research directions from public biomedical evidence",
+        label: "Generate research directions",
+        description: "Grounded in public biomedical source material",
         value: "propose"
       },
       {
