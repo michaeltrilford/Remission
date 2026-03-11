@@ -11,7 +11,7 @@ const PUBMED_SEARCH_URL = "https://eutils.ncbi.nlm.nih.gov/entrez/eutils/esearch
 const PUBMED_SUMMARY_URL = "https://eutils.ncbi.nlm.nih.gov/entrez/eutils/esummary.fcgi";
 const OPEN_TARGETS_URL = "https://api.platform.opentargets.org/api/v4/graphql";
 const NCI_CANCER_TYPES_URL = "https://www.cancer.gov/types";
-const REVIEW_APP_URL = process.env.REMISSION_REVIEW_APP_URL || "http://localhost:1300";
+const REVIEW_APP_URL = process.env.REMISSION_REVIEW_APP_URL || "https://remission-sigma.vercel.app";
 const STARTER_TOPICS = [
   "Lung Cancer",
   "Breast Cancer",
