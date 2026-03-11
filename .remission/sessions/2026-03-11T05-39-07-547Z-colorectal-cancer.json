@@ -1,0 +1,214 @@
+{
+  "id": "2026-03-11T05-39-07-547Z-colorectal-cancer",
+  "topic": "Colorectal Cancer",
+  "createdAt": "2026-03-11T05:39:07.547Z",
+  "evidence": {
+    "topic": "Colorectal Cancer",
+    "retrieved_at": "2026-03-11T05:38:32.768Z",
+    "pubmed": [
+      {
+        "id": "pubmed:34074695",
+        "title": "Genetic and biological hallmarks of colorectal cancer.",
+        "source": "PubMed",
+        "pubdate": "2021 Jun",
+        "url": "https://pubmed.ncbi.nlm.nih.gov/34074695/"
+      },
+      {
+        "id": "pubmed:33208072",
+        "title": "Colorectal Cancer Epidemiology: Recent Trends and Impact on Outcomes.",
+        "source": "PubMed",
+        "pubdate": "2021",
+        "url": "https://pubmed.ncbi.nlm.nih.gov/33208072/"
+      },
+      {
+        "id": "pubmed:30646512",
+        "title": "Colorectal Cancer and Nutrition.",
+        "source": "PubMed",
+        "pubdate": "2019 Jan 14",
+        "url": "https://pubmed.ncbi.nlm.nih.gov/30646512/"
+      },
+      {
+        "id": "pubmed:35351269",
+        "title": "Colorectal Cancer: Preoperative Evaluation and Staging.",
+        "source": "PubMed",
+        "pubdate": "2022 Apr",
+        "url": "https://pubmed.ncbi.nlm.nih.gov/35351269/"
+      },
+      {
+        "id": "pubmed:24639430",
+        "title": "[Colorectal cancer - review].",
+        "source": "PubMed",
+        "pubdate": "2014 Feb",
+        "url": "https://pubmed.ncbi.nlm.nih.gov/24639430/"
+      }
+    ],
+    "open_targets": [
+      {
+        "id": "opentargets:MONDO_0005575",
+        "name": "colorectal cancer",
+        "entity": "disease",
+        "description": "A primary or metastatic malignant neoplasm that affects the colon or rectum. Representative examples include carcinoma, lymphoma, and sarcoma.",
+        "source": "Open Targets",
+        "url": "https://platform.opentargets.org/disease/MONDO_0005575"
+      },
+      {
+        "id": "opentargets:EFO_1001951",
+        "name": "colorectal carcinoma",
+        "entity": "disease",
+        "description": "A malignant epithelial neoplasm that arises from the colon or rectum and invades through the muscularis mucosa into the submucosa. The vast majority are adenocarcinomas.",
+        "source": "Open Targets",
+        "url": "https://platform.opentargets.org/disease/EFO_1001951"
+      },
+      {
+        "id": "opentargets:MONDO_0012132",
+        "name": "colorectal cancer, susceptibility to, 1",
+        "entity": "disease",
+        "description": "Any colorectal cancer in which the cause of the disease is a mutation in the GALNT12 gene.",
+        "source": "Open Targets",
+        "url": "https://platform.opentargets.org/disease/MONDO_0012132"
+      },
+      {
+        "id": "opentargets:MONDO_0023113",
+        "name": "familial colorectal cancer",
+        "entity": "disease",
+        "description": "Familial colon cancer is a cluster of colon cancer within a family. Most cases of colon cancer occur sporadically in people with little to no family history of the condition. Approximately 3-5% of colon cancer is considered 'hereditary' and is thought to be caused by an inherited predisposition tocolon cancer that is passed down through a family in an autosomal dominant or autosomal recessive manner. In some of these families, the underlying genetic cause is not known; however, many of these cases are caused by changes (mutations) in the APC , MYH , MLH1 , MSH2 , MSH6 , PMS2 , EPCAM , PTEN , STK11 , SMAD4 , BMPR1A , NTHL1 , POLE , and POLD1 genes (which are associated with hereditary cancer syndromes). An additional 10-30% of people diagnosed with colon cancer have a significant family history of the condition but have no identifiable mutation in a gene known to cause a hereditary predisposition to colon cancer. These clusters of colon cancer are likely due to a combination of gene(s) and other shared factors such as environment and lifestyle. High-risk cancer screening and other preventative measures such as prophylactic surgeries are typically recommended in people who have an increased risk for colon cancer based on their personal and/or family histories.",
+        "source": "Open Targets",
+        "url": "https://platform.opentargets.org/disease/MONDO_0023113"
+      },
+      {
+        "id": "opentargets:MONDO_0100287",
+        "name": "POLE-related polyposis and colorectal cancer syndrome",
+        "entity": "disease",
+        "description": "An autosomal dominant hereditary syndrome caused by germline pathogenic POLE variants. It is characterized by the presence of colorectal polyps and colorectal cancer.",
+        "source": "Open Targets",
+        "url": "https://platform.opentargets.org/disease/MONDO_0100287"
+      }
+    ]
+  },
+  "result": {
+    "topic": "Colorectal Cancer",
+    "hypotheses": [
+      {
+        "id": "H1",
+        "title": "miR‑143 replacement via GalNAc‑conjugated antisense oligonucleotides to suppress EMT in colorectal epithelium",
+        "mechanism": "GalNAc‑conjugated ASO delivers miR‑143 mimics to colonic epithelial cells, increasing miR‑143 levels that inhibit SNAI2 transcription, thereby reducing EMT transcription factors and tumor invasiveness.",
+        "rationale": "miR‑143 is downregulated in CRC and functions as a tumor suppressor; restoration of its expression has been shown to reverse EMT signatures (see pubmed:34074695).",
+        "novelty_score": 4,
+        "plausibility_score": 3,
+        "next_test": "Administer GalNAc‑miR‑143 ASO to patient‑derived organoids and measure EMT marker expression by qPCR.",
+        "evidence_refs": [
+          "pubmed:34074695"
+        ]
+      },
+      {
+        "id": "H2",
+        "title": "Dietary fiber–derived short‑chain fatty acids as epigenetic modulators of APC‑mutant clone suppression",
+        "mechanism": "Butyrate generated from fiber fermentation inhibits histone deacetylases, leading to re‑expression of wild‑type APC in APC‑mutant cells and inducing senescence.",
+        "rationale": "Epidemiological data link high fiber intake with reduced CRC incidence; mechanistic studies show butyrate can reactivate silenced tumor suppressors (see pubmed:30646512).",
+        "novelty_score": 3,
+        "plausibility_score": 4,
+        "next_test": "Conduct a pilot dietary intervention trial with high‑fiber diet vs control, measuring APC expression in circulating tumor DNA.",
+        "evidence_refs": [
+          "pubmed:30646512"
+        ]
+      },
+      {
+        "id": "H3",
+        "title": "Targeting POLE mutant clone through synthetic lethality with NAD+ biosynthesis inhibition",
+        "mechanism": "POLE exonuclease domain mutants impair DNA repair; co‑inhibition of PARP and nicotinamide phosphoribosyltransferase (NAMPT) creates a synthetic lethal stress in POLE‑mutant cells.",
+        "rationale": "The open‑target disease MONDO_0100287 describes POLE‑related polyposis; synthetic lethality screens have identified NAD+ pathway dependencies (see opentargets:MONDO_0100287).",
+        "novelty_score": 5,
+        "plausibility_score": 3,
+        "next_test": "Test NAMPT inhibitor efficacy in POLE‑mutant organoids compared to WT by viability assays.",
+        "evidence_refs": [
+          "opentargets:MONDO_0100287"
+        ]
+      },
+      {
+        "id": "H4",
+        "title": "Modulating gut microbiota to enhance secondary bile acid signaling and induce tumor‑suppressive FXR activity",
+        "mechanism": "Specific probiotic strains produce secondary bile acids that act as agonists for the Farnesoid X Receptor (FXR), leading to transcriptional repression of cell‑proliferation genes in colonocytes.",
+        "rationale": "FXR activation has been linked to reduced CRC progression; alterations in bile acid metabolism are noted in CRC (see pubmed:35351269).",
+        "novelty_score": 2,
+        "plausibility_score": 4,
+        "next_test": "Administer engineered probiotic strain to APC^Min/+ mice and assess FXR target gene expression in colonic tissue.",
+        "evidence_refs": [
+          "pubmed:35351269"
+        ]
+      },
+      {
+        "id": "H5",
+        "title": "Anti‑ANGPTL4 antibody to block metastasis‑associated vascular remodeling in early‑stage CRC",
+        "mechanism": "ANGPTL4 promotes angiogenesis and vascular leakage; neutralizing antibodies limit these effects, potentially reducing tumor spread.",
+        "rationale": "ANGPTL4 is upregulated in CRC metastasis; its role is highlighted in genetic hallmark literature (see pubmed:34074695).",
+        "novelty_score": 3,
+        "plausibility_score": 3,
+        "next_test": "Phase‑I safety study of anti‑ANGPTL4 monotherapy in patients with resectable stage II CRC.",
+        "evidence_refs": [
+          "pubmed:34074695"
+        ]
+      },
+      {
+        "id": "H6",
+        "title": "Genetic screening for GALNT12‑related susceptibility to prioritize chemoprevention in high‑risk families",
+        "mechanism": "Loss‑of‑function GALNT12 variants increase risk; carriers could benefit from targeted chemopreventive agents such as aspirin or COX‑2 inhibitors.",
+        "rationale": "Open Targets MONDO_0012132 defines a hereditary CRC susceptibility linked to GALNT12; family history data underscore need for early detection (see opentargets:MONDO_0012132).",
+        "novelty_score": 2,
+        "plausibility_score": 4,
+        "next_test": "Retrospective cohort analysis of GALNT12 carriers treated with long‑term aspirin versus non‑users to evaluate CRC incidence.",
+        "evidence_refs": [
+          "opentargets:MONDO_0012132"
+        ]
+      },
+      {
+        "id": "H7",
+        "title": "Inhibition of MYC‑driven transcriptional addiction via BET bromodomain displacement using dBET‑6 analogs",
+        "mechanism": "BET bromodomain degradation leads to reduced MYC transcription, inducing apoptosis in MYC‑amplified CRC cells.",
+        "rationale": "MYC amplification is a common genetic alteration in CRC (see pubmed:34074695); BET inhibitors have shown activity in MYC‑dependent tumors (see opentargets:EFO_1001951).",
+        "novelty_score": 4,
+        "plausibility_score": 3,
+        "next_test": "Ex vivo testing of dBET‑6 in patient‑derived CRC slices to measure MYC target gene down‑regulation.",
+        "evidence_refs": [
+          "pubmed:34074695",
+          "opentargets:EFO_1001951"
+        ]
+      },
+      {
+        "id": "H8",
+        "title": "Metabolic reprogramming with ketogenic diet adjunct to standard chemotherapy to limit tumor‑associated inflammation",
+        "mechanism": "Ketogenic diet reduces glucose availability, shifting cellular metabolism toward oxidative phosphorylation and dampening NF‑κB‑driven inflammatory signaling.",
+        "rationale": "Nutritional interventions affect CRC outcomes; epidemiological studies suggest metabolic modulators may improve chemosensitivity (see pubmed:30646512).",
+        "novelty_score": 1,
+        "plausibility_score": 2,
+        "next_test": "Pilot feasibility trial of ketogenic diet combined with oxaliplatin in stage III CRC patients, measuring cytokine levels pre‑ and post‑treatment.",
+        "evidence_refs": [
+          "pubmed:30646512"
+        ]
+      },
+      {
+        "id": "H9",
+        "title": "CRISPRa activation of PTEN expression to restore tumor‑suppressive signaling in early adenomas",
+        "mechanism": "CRISPR activation (CRISPRa) targeted to PTEN promoter increases its transcription in adenomatous cells, leading to inhibition of PI3K‑AKT signaling.",
+        "rationale": "PTEN loss is an early event in CRC progression; restoring PTEN is a plausible preventive strategy (see pubmed:24639430).",
+        "novelty_score": 5,
+        "plausibility_score": 2,
+        "next_test": "Delivery of PTEN‑targeting CRISPRa via AAV in APC^Min/+ mouse adenomas and assessment of growth inhibition.",
+        "evidence_refs": [
+          "pubmed:24639430"
+        ]
+      },
+      {
+        "id": "H10",
+        "title": "Combination of immune checkpoint blockade with localized oncolytic virus to enhance anti‑tumor immunity in microsatellite stable CRC",
+        "mechanism": "Oncolytic virus selectively replicates in tumor cells and releases neoantigens, while checkpoint inhibition releases T‑cell brakes, together promoting durable anti‑tumor response.",
+        "rationale": "Microsatellite stable CRC has limited response to PD‑1 blockade; localized oncolytic approaches may overcome this (see pubmed:33208072).",
+        "novelty_score": 4,
+        "plausibility_score": 3,
+        "next_test": "Phase Ib study of combined pembrolizumab and oncolytic HSV‑1 in locally advanced CRC refractory to standard therapy.",
+        "evidence_refs": [
+          "pubmed:33208072"
+        ]
+      }
+    ]
+  }
+}

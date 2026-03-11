@@ -8,6 +8,13 @@
     "start": "node src/remission.js start",
     "propose": "node src/remission.js propose",
     "evidence": "node src/remission.js evidence",
+    "review": "node review/server.js",
     "check": "node --check src/remission.js"
+  },
+  "dependencies": {
+    "esbuild": "^0.27.3",
+    "ora": "^9.3.0",
+    "react": "^19.2.4",
+    "react-dom": "^19.2.4"
   }
 }

@@ -1,0 +1,224 @@
+{
+  "id": "2026-03-11T03-39-24-694Z-lung-cancer",
+  "topic": "Lung Cancer",
+  "createdAt": "2026-03-11T03:39:24.695Z",
+  "evidence": {
+    "topic": "Lung Cancer",
+    "retrieved_at": "2026-03-11T03:38:56.082Z",
+    "pubmed": [
+      {
+        "id": "pubmed:34445366",
+        "title": "Current and Future Development in Lung Cancer Diagnosis.",
+        "source": "PubMed",
+        "pubdate": "2021 Aug 12",
+        "url": "https://pubmed.ncbi.nlm.nih.gov/34445366/"
+      },
+      {
+        "id": "pubmed:30955514",
+        "title": "Lung Cancer.",
+        "source": "PubMed",
+        "pubdate": "2019 May",
+        "url": "https://pubmed.ncbi.nlm.nih.gov/30955514/"
+      },
+      {
+        "id": "pubmed:32008623",
+        "title": "Lung Cancer 2020: Epidemiology, Etiology, and Prevention.",
+        "source": "PubMed",
+        "pubdate": "2020 Mar",
+        "url": "https://pubmed.ncbi.nlm.nih.gov/32008623/"
+      },
+      {
+        "id": "pubmed:29700092",
+        "title": "Recent advances in the management of lung cancer.",
+        "source": "PubMed",
+        "pubdate": "2018 Apr 1",
+        "url": "https://pubmed.ncbi.nlm.nih.gov/29700092/"
+      },
+      {
+        "id": "pubmed:35671760",
+        "title": "Lung Cancer: Epidemiology and Screening.",
+        "source": "PubMed",
+        "pubdate": "2022 Jun",
+        "url": "https://pubmed.ncbi.nlm.nih.gov/35671760/"
+      }
+    ],
+    "open_targets": [
+      {
+        "id": "opentargets:MONDO_0008903",
+        "name": "lung cancer",
+        "entity": "disease",
+        "description": "A malignant neoplasm involving the lung.",
+        "source": "Open Targets",
+        "url": "https://platform.opentargets.org/disease/MONDO_0008903"
+      },
+      {
+        "id": "opentargets:EFO_0001071",
+        "name": "lung carcinoma",
+        "entity": "disease",
+        "description": "A carcinoma that arises from epithelial cells of the lung",
+        "source": "Open Targets",
+        "url": "https://platform.opentargets.org/disease/EFO_0001071"
+      },
+      {
+        "id": "opentargets:HP_0100526",
+        "name": "Neoplasm of the lung",
+        "entity": "disease",
+        "description": "Tumor of the lung.",
+        "source": "Open Targets",
+        "url": "https://platform.opentargets.org/disease/HP_0100526"
+      },
+      {
+        "id": "opentargets:EFO_0022194",
+        "name": "EGFR-related lung cancer",
+        "entity": "disease",
+        "description": "Lung cancer associated with a mutation in the EGFR gene. Patients with lung cancers with EGFR mutations tend to have minimal to no smoking history.",
+        "source": "Open Targets",
+        "url": "https://platform.opentargets.org/disease/EFO_0022194"
+      },
+      {
+        "id": "opentargets:EFO_0006953",
+        "name": "family history of lung cancer",
+        "entity": "disease",
+        "description": "A reported family history of lung cancer in one or more family members.",
+        "source": "Open Targets",
+        "url": "https://platform.opentargets.org/disease/EFO_0006953"
+      }
+    ]
+  },
+  "result": {
+    "topic": "Lung Cancer",
+    "hypotheses": [
+      {
+        "id": "H1",
+        "title": "Dietary sulforaphane supplementation enhances EGFR‑targeted therapy response in EGFR‑mutant NSCLC",
+        "mechanism": "Sulforaphane activates Nrf2, lowering oxidative‑stress–driven resistance and increasing sensitivity of EGFR‑mutant tumor cells to tyrosine kinase inhibitors",
+        "rationale": "EGFR‑mutant lung cancers have minimal smoking history and often display elevated oxidative stress; cruciferous vegetables are rich in sulforaphane which modulates Nrf2 pathways",
+        "novelty_score": 2,
+        "plausibility_score": 3,
+        "next_test": "Phase II trial of oral sulforaphane adjunct to osimertinib in EGFR‑mutant NSCLC patients, with progression‑free survival as endpoint",
+        "evidence_refs": [
+          "opentargets:EFO_0022194",
+          "pubmed:30955514",
+          "pubmed:34445366"
+        ]
+      },
+      {
+        "id": "H2",
+        "title": "Vitamin D3 modulates tumor‑associated macrophage phenotype in KRAS‑driven lung adenocarcinoma",
+        "mechanism": "Active vitamin D suppresses IL‑6 production and promotes M2 polarization of macrophages, potentially reducing immunosuppressive signaling",
+        "rationale": "KRAS‑mutant tumors often create a pro‑inflammatory microenvironment; vitamin D receptors are present on immune cells and have been implicated in cancer immunotherapy outcomes",
+        "novelty_score": 1,
+        "plausibility_score": 4,
+        "next_test": "Ex vivo study of vitamin D3‑treated macrophages co‑cultured with KRAS‑mutant lung cancer cell lines, measuring IL‑6 and PD‑L1 expression",
+        "evidence_refs": [
+          "pubmed:35671760",
+          "opentargets:HP_0100526"
+        ]
+      },
+      {
+        "id": "H3",
+        "title": "Intermittent fasting attenuates IGF‑1 signaling and improves response to chemotherapy in TP53‑mutant NSCLC",
+        "mechanism": "Fasting lowers circulating IGF‑1 and insulin levels, dampening PI3K‑AKT pathway activation and enhancing DNA damage repair mechanisms",
+        "rationale": "TP53 mutations correlate with aggressive disease; IGF‑1 signaling is a driver of proliferation in many NSCLC subtypes; dietary fasting is a non‑pharmacologic lever to modulate this axis",
+        "novelty_score": 1,
+        "plausibility_score": 3,
+        "next_test": "Pre‑clinical mouse xenograft study of cyclical fasting combined with cisplatin, assessing tumor growth and apoptosis markers",
+        "evidence_refs": [
+          "pubmed:29700092",
+          "opentargets:EFO_0006953"
+        ]
+      },
+      {
+        "id": "H4",
+        "title": "Omega‑3 fatty acids reshape the lipid microenvironment of EGFR‑mutant lung tumors, augmenting TKI efficacy",
+        "mechanism": "EPA/DHA incorporation alters membrane lipid rafts, reducing EGFR clustering and restoring susceptibility to TKIs",
+        "rationale": "Lipid metabolism is a known feature of EGFR‑mutant cancers; dietary omega‑3 influences membrane composition and inflammatory lipid mediators",
+        "novelty_score": 2,
+        "plausibility_score": 3,
+        "next_test": "Phase I trial of EPA/DHA supplementation alongside erlotinib in EGFR‑mutant NSCLC patients, measuring serum lipid profiles and tumor response rates",
+        "evidence_refs": [
+          "pubmed:32008623",
+          "opentargets:EFO_0001071"
+        ]
+      },
+      {
+        "id": "H5",
+        "title": "Coffee polyphenols enhance DNA repair capacity in NSCLC cells exposed to DNA‑damaging agents",
+        "mechanism": "Chlorogenic acid and related polyphenols activate ATM/ATR pathways, increasing repair of double‑strand breaks",
+        "rationale": "Improved DNA repair can mitigate resistance to platinum‑based chemotherapy; coffee is a major dietary source of these polyphenols",
+        "novelty_score": 1,
+        "plausibility_score": 3,
+        "next_test": "In vitro dose‑response experiment with caffeine metabolites and cisplatin in NSCLC cell lines, measuring γ‑H2AX foci persistence",
+        "evidence_refs": [
+          "pubmed:34445366",
+          "opentargets:HP_0100526"
+        ]
+      },
+      {
+        "id": "H6",
+        "title": "High‑altitude hypoxia preconditioning sensitizes KRAS‑mutant tumors to MEK inhibition",
+        "mechanism": "Transient hypoxia up‑regulates DUSP6, which feedback‑inhibits MAPK signaling and primes cells for MEK blockade",
+        "rationale": "KRAS‑driven NSCLC often shows adaptive MAPK rewiring; hypoxia is a common feature of lung tumors and can be experimentally manipulated via environmental manipulation",
+        "novelty_score": 2,
+        "plausibility_score": 3,
+        "next_test": "Animal study exposing KRAS‑mutant xenografts to controlled low‑oxygen environment before MEK inhibitor treatment, assessing tumor volume and phospho‑ERK levels",
+        "evidence_refs": [
+          "pubmed:32008623",
+          "opentargets:EFO_0022194"
+        ]
+      },
+      {
+        "id": "H7",
+        "title": "Lactobacillus reuteri supplementation reduces systemic IL‑6 levels and improves immunotherapy outcomes in NSCLC",
+        "mechanism": "The bacterium produces reutericin, which attenuates NF‑κB activation and lowers circulating IL‑6, potentially restoring responsiveness to PD‑1 blockade",
+        "rationale": "Elevated IL‑6 is linked to immunosuppressive phenotypes in lung cancer; gut‑derived microbes can modulate cytokine production; specific strains have shown anti‑inflammatory effects in human trials",
+        "novelty_score": 1,
+        "plausibility_score": 4,
+        "next_test": "Phase I trial of Lactobacillus reuteri probiotic adjunct to pembrolizumab in advanced NSCLC, measuring serum IL‑6 and objective response rate",
+        "evidence_refs": [
+          "pubmed:30955514",
+          "opentargets:MONDO_0008903"
+        ]
+      },
+      {
+        "id": "H8",
+        "title": "Melatonin chronotherapy optimizes timing of EGFR‑TKI administration to maximize efficacy",
+        "mechanism": "Endogenous melatonin peaks at night and can synchronize circumscribed DNA repair cycles, enhancing drug uptake during vulnerable phases",
+        "rationale": "Circadian regulation influences pharmacodynamics of TKIs; melatonin supplementation is safe and can be used to align dosing schedules",
+        "novelty_score": 2,
+        "plausibility_score": 3,
+        "next_test": "Retrospective cohort analysis of patients taking EGFR‑TKIs at night versus day, stratified by melatonin use, evaluating progression‑free survival",
+        "evidence_refs": [
+          "pubmed:35671760",
+          "opentargets:EFO_0001071"
+        ]
+      },
+      {
+        "id": "H9",
+        "title": "Polyphenol‑rich berry extracts modulate tumor‑associated macrophage infiltration via CCR2 inhibition",
+        "mechanism": "Anthocyanins block CCR2 signaling, reducing recruitment of inflammatory macrophages that support tumor growth",
+        "rationale": "High CCR2 expression correlates with poor prognosis in lung adenocarcinoma; dietary polyphenols have documented anti‑CCR2 activity in pre‑clinical models",
+        "novelty_score": 1,
+        "plausibility_score": 3,
+        "next_test": "In vivo mouse study delivering freeze‑dried berry powder to CCR2‑high lung tumor models, measuring macrophage density and tumor growth",
+        "evidence_refs": [
+          "pubmed:29700092",
+          "opentargets:HP_0100526"
+        ]
+      },
+      {
+        "id": "H10",
+        "title": "Selenium supplementation enhances platinum drug‑induced apoptosis in p53‑wildtype lung cancers",
+        "mechanism": "Selenoproteins increase ROS generation and impede glutathione compensation, leading to heightened oxidative damage when exposed to cisplatin",
+        "rationale": "Selenium status varies with diet and has been linked to cancer outcomes; platinum drugs rely on ROS for cytotoxicity; boosting ROS buffering pathways can sensitize cells",
+        "novelty_score": 2,
+        "plausibility_score": 3,
+        "next_test": "Phase II trial of selenomethionine alongside cisplatin in p53‑wildtype NSCLC, monitoring redox markers and adverse events",
+        "evidence_refs": [
+          "pubmed:34445366",
+          "opentargets:EFO_0006953"
+        ]
+      }
+    ]
+  }
+}

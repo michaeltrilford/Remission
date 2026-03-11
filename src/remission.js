@@ -1,7 +1,9 @@
 import fs from "node:fs";
 import path from "node:path";
+import { spawn } from "node:child_process";
 import readline from "node:readline/promises";
 import { stdin as input, stdout as output } from "node:process";
+import ora from "ora";
 
 const MODEL = "nvidia/nemotron-3-nano-30b-a3b:free";
 const OPENROUTER_URL = "https://openrouter.ai/api/v1/chat/completions";
@@ -9,6 +11,7 @@ const PUBMED_SEARCH_URL = "https://eutils.ncbi.nlm.nih.gov/entrez/eutils/esearch
 const PUBMED_SUMMARY_URL = "https://eutils.ncbi.nlm.nih.gov/entrez/eutils/esummary.fcgi";
 const OPEN_TARGETS_URL = "https://api.platform.opentargets.org/api/v4/graphql";
 const NCI_CANCER_TYPES_URL = "https://www.cancer.gov/types";
+const REVIEW_APP_URL = process.env.REMISSION_REVIEW_APP_URL || "http://localhost:1300";
 const STARTER_TOPICS = [
   "Lung Cancer",
   "Breast Cancer",
@@ -86,26 +89,85 @@ function color(text, value) {
   return `${value}${text}${ANSI.reset}`;
 }
 
-function sleep(ms) {
-  return new Promise((resolve) => setTimeout(resolve, ms));
+function stripAnsi(text) {
+  return String(text ?? "").replace(/\x1b\[[0-9;]*m/g, "");
 }
 
-function divider(width = 72) {
+function visibleLength(text) {
+  return stripAnsi(text).length;
+}
+
+function padVisible(text, width) {
+  const value = String(text ?? "");
+  const padding = Math.max(0, width - visibleLength(value));
+  return `${value}${" ".repeat(padding)}`;
+}
+
+function terminalWidth() {
+  return Math.max(60, Math.min(output.columns || 80, 120));
+}
+
+function panelWidth(maxWidth = 72) {
+  return Math.max(32, Math.min(maxWidth, terminalWidth()));
+}
+
+function wrapLine(text, width) {
+  const value = String(text ?? "");
+  if (visibleLength(value) <= width) {
+    return [value];
+  }
+
+  const words = value.split(/\s+/);
+  const lines = [];
+  let current = "";
+
+  for (const word of words) {
+    if (!current) {
+      current = word;
+      continue;
+    }
+
+    if (visibleLength(`${current} ${word}`) <= width) {
+      current = `${current} ${word}`;
+      continue;
+    }
+
+    lines.push(current);
+    current = word;
+  }
+
+  if (current) {
+    lines.push(current);
+  }
+
+  return lines.length > 0 ? lines : [""];
+}
+
+function divider(width = panelWidth()) {
   return "─".repeat(width);
 }
 
-function makePanel(title, lines, width = 72) {
+function makePanel(title, lines, width = panelWidth()) {
   const innerWidth = width - 4;
-  const renderedLines = lines.map((line) => {
-    const trimmed = line.length > innerWidth ? `${line.slice(0, innerWidth - 1)}…` : line;
-    return `│ ${trimmed.padEnd(innerWidth)} │`;
+  const expandedLines = lines.flatMap((line) => {
+    if (String(line ?? "") === "") {
+      return [""];
+    }
+
+    return wrapLine(line, innerWidth);
   });
+  const renderedLines = expandedLines.map((line) => `│ ${padVisible(line, innerWidth)} │`);
+  const titleWidth = visibleLength(title);
 
   return [
-    `┌─ ${title}${"─".repeat(Math.max(0, width - title.length - 5))}┐`,
+    `┌─ ${title}${"─".repeat(Math.max(0, width - titleWidth - 5))}┐`,
     ...renderedLines,
     `└${"─".repeat(width - 2)}┘`
   ].join("\n");
+}
+
+function renderSingleColumn(title, lines, width = panelWidth()) {
+  return makePanel(title, lines, width);
 }
 
 function renderTwoColumn(leftTitle, leftLines, rightTitle, rightLines, width = 38) {
@@ -118,14 +180,16 @@ function renderTwoColumn(leftTitle, leftLines, rightTitle, rightLines, width = 3
   const right = normalize(rightLines);
   const innerWidth = width - 4;
   const rows = [];
+  const leftTitleWidth = visibleLength(leftTitle);
+  const rightTitleWidth = visibleLength(rightTitle);
 
   rows.push(
-    `┌─ ${leftTitle}${"─".repeat(Math.max(0, width - leftTitle.length - 5))}┐ ┌─ ${rightTitle}${"─".repeat(Math.max(0, width - rightTitle.length - 5))}┐`
+    `┌─${leftTitle}${"─".repeat(Math.max(0, width - leftTitleWidth - 3))}┐ ┌─${rightTitle}${"─".repeat(Math.max(0, width - rightTitleWidth - 3))}┐`
   );
 
   for (let index = 0; index < left.length; index += 1) {
-    const leftLine = left[index].slice(0, innerWidth).padEnd(innerWidth);
-    const rightLine = right[index].slice(0, innerWidth).padEnd(innerWidth);
+    const leftLine = padVisible(left[index].slice(0, innerWidth), innerWidth);
+    const rightLine = padVisible(right[index].slice(0, innerWidth), innerWidth);
     rows.push(`│ ${leftLine} │ │ ${rightLine} │`);
   }
 
@@ -133,129 +197,70 @@ function renderTwoColumn(leftTitle, leftLines, rightTitle, rightLines, width = 3
   return rows.join("\n");
 }
 
-function buildGrowthCurve(hypothesis) {
-  const novelty = Number(hypothesis.novelty_score) || 5;
-  const plausibility = Number(hypothesis.plausibility_score) || 5;
-  const base = [9, 8, 8, 7, 7, 6, 6, 5];
-  const variant = base.map((value, index) =>
-    Math.max(1, value - Math.round((plausibility + novelty) / 8) + Math.round(index / 3))
-  );
+function renderEvidencePanels(leftTitle, leftLines, rightTitle, rightLines) {
+  const total = terminalWidth();
+  const twoColumnWidth = Math.floor((total - 1) / 2);
 
-  const rows = [];
-  for (let y = 10; y >= 1; y -= 1) {
-    let line = `${String(y).padStart(2, " ")} │`;
-    for (let x = 0; x < base.length; x += 1) {
-      const baselinePoint = base[x] === y ? "·" : " ";
-      const variantPoint = variant[x] === y ? "█" : baselinePoint;
-      line += variantPoint;
-    }
-    rows.push(line);
+  if (twoColumnWidth < 26) {
+    return [
+      renderSingleColumn(leftTitle, leftLines, total),
+      "",
+      renderSingleColumn(rightTitle, rightLines, total)
+    ].join("\n");
   }
-  rows.push("   └────────");
-  rows.push("    t0 t1 t2");
-  return rows;
+
+  return renderTwoColumn(leftTitle, leftLines, rightTitle, rightLines, twoColumnWidth);
 }
 
 async function showBootSplash() {
-  if (!input.isTTY || !output.isTTY) {
-    return;
-  }
-
-  output.write("\x1b[2J\x1b[H");
-  console.log(color("REMISSION :: SIGNAL DISCOVERY TERMINAL", ANSI.green));
-  console.log(color(divider(), ANSI.dim));
-  console.log(color("Booting biosignal scanner...", ANSI.cyan));
-  await sleep(120);
-  console.log(color("Loading public knowledge interfaces...", ANSI.cyan));
-  await sleep(120);
-  console.log(color("Attaching Nemotron reasoning core...", ANSI.cyan));
-  await sleep(120);
-  console.log(color("Ready.\n", ANSI.green));
+  return;
 }
 
 async function showSignalAcquisition(topic) {
-  if (!input.isTTY || !output.isTTY) {
-    return;
-  }
-
-  const frames = ["[·    ]", "[··   ]", "[···  ]", "[ ··· ]", "[  ···]", "[   ··]"];
-  for (let index = 0; index < frames.length; index += 1) {
-    output.write(`\r${color("Signal acquisition", ANSI.amber)} ${frames[index]} ${topic.slice(0, 36)}`);
-    await sleep(70);
-  }
-  output.write("\r\x1b[2K");
+  return topic;
 }
 
-function createStatusTracker() {
-  if (!input.isTTY || !output.isTTY) {
+function createLoader() {
+  if (!output.isTTY || process.env.CI === "true") {
     return {
-      start() {},
-      update() {},
-      complete() {},
-      stop() {}
+      start(message) {
+        if (message) {
+          console.log(message);
+        }
+      },
+      update(message) {
+        if (message) {
+          console.log(message);
+        }
+      },
+      stop(finalMessage = "") {
+        if (finalMessage) {
+          console.log(finalMessage);
+        }
+      }
     };
   }
 
-  const state = {
-    topic: "",
-    stage: "Idle",
-    detail: "",
-    lines: [],
-    frameIndex: 0,
-    timer: null
-  };
-  const frames = ["◐", "◓", "◑", "◒"];
-
-  function render() {
-    const frame = frames[state.frameIndex % frames.length];
-    output.write("\x1b[2J\x1b[H");
-    console.log(color("REMISSION :: ACTIVE SCAN", ANSI.green));
-    console.log(color(divider(), ANSI.dim));
-    console.log(color(`Topic   :: ${state.topic}`, ANSI.cyan));
-    console.log(color(`Stage   :: ${state.stage}`, ANSI.amber));
-    if (state.detail) {
-      console.log(color(`Detail  :: ${state.detail}`, ANSI.dim));
-    }
-    console.log("");
-    console.log(makePanel("Signal monitor", [`${frame} ${state.stage}`, state.detail || "stabilizing sensor array"]));
-    if (state.lines.length > 0) {
-      console.log("");
-      console.log(color(makePanel("Trace", state.lines.slice(-6)), ANSI.dim));
-    }
-  }
+  const spinner = ora({
+    text: "",
+    spinner: "dots",
+    color: "cyan",
+    discardStdin: false
+  });
 
   return {
-    start(topic) {
-      state.topic = topic;
-      state.stage = "Acquiring signal";
-      state.detail = "Initializing public knowledge interfaces";
-      render();
-      state.timer = setInterval(() => {
-        state.frameIndex += 1;
-        render();
-      }, 100);
+    start(message) {
+      spinner.text = message;
+      spinner.start();
     },
-    update(stage, detail = "") {
-      state.stage = stage;
-      state.detail = detail;
-      if (detail) {
-        state.lines.push(`${stage} :: ${detail}`);
-      } else {
-        state.lines.push(stage);
+    update(message) {
+      spinner.text = message;
+    },
+    stop(finalMessage = "") {
+      spinner.stop();
+      if (finalMessage) {
+        console.log(finalMessage);
       }
-      render();
-    },
-    complete(stage, detail = "") {
-      state.stage = stage;
-      state.detail = detail;
-      state.lines.push(detail ? `${stage} :: ${detail}` : stage);
-      render();
-    },
-    stop() {
-      if (state.timer) {
-        clearInterval(state.timer);
-      }
-      output.write("\x1b[2J\x1b[H");
     }
   };
 }
@@ -340,17 +345,6 @@ async function fetchJson(url, options = {}) {
   }
 
   return response.json();
-}
-
-async function fetchText(url, options = {}) {
-  const response = await fetch(url, options);
-
-  if (!response.ok) {
-    const errorBody = await response.text();
-    throw new Error(`Request failed ${response.status}: ${errorBody}`);
-  }
-
-  return response.text();
 }
 
 async function fetchPubMedEvidence(topic) {
@@ -463,41 +457,197 @@ function renderEvidence(evidence) {
           item.description || item.id
         ]);
 
-  console.log(`\n${color(`Evidence pack for ${evidence.topic}`, ANSI.green)}\n`);
-  console.log(renderTwoColumn("PubMed", pubmedLines, "Open Targets", targetLines));
+  console.log(`\n${color(`Source pack for ${evidence.topic}`, ANSI.green)}\n`);
+  console.log(renderEvidencePanels("PubMed", pubmedLines, "Open Targets", targetLines));
   console.log("");
 }
 
-function renderHypothesis(hypothesis, index) {
-  const summaryPanel = makePanel(
-    color(`PATH ${index + 1} :: ${hypothesis.title}`, ANSI.green),
-    [
-      `Mechanism: ${hypothesis.mechanism}`,
-      `Novelty: ${hypothesis.novelty_score}/10`,
-      `Plausibility: ${hypothesis.plausibility_score}/10`,
-      "",
-      `Rationale: ${hypothesis.rationale}`,
-      "",
-      `Next test: ${hypothesis.next_test}`,
-      Array.isArray(hypothesis.evidence_refs) && hypothesis.evidence_refs.length > 0
-        ? `Evidence refs: ${hypothesis.evidence_refs.join(", ")}`
-        : "Evidence refs: none attached"
-    ]
-  );
+function openExternal(url) {
+  if (process.platform === "darwin") {
+    spawn("open", [url], { detached: true, stdio: "ignore" }).unref();
+    return;
+  }
 
-  console.log(`\n${summaryPanel}\n`);
-  console.log(color("Weak signal detected :: projected branch delta", ANSI.amber));
-  console.log(buildGrowthCurve(hypothesis).join("\n"));
-  console.log("");
-  console.log(color("Branching path map", ANSI.cyan));
-  console.log(`baseline ──┬── ${hypothesis.id}`);
-  console.log("          ├── alt-A");
-  console.log("          └── alt-B\n");
+  if (process.platform === "win32") {
+    spawn("cmd", ["/c", "start", "", url], { detached: true, stdio: "ignore" }).unref();
+    return;
+  }
+
+  spawn("xdg-open", [url], { detached: true, stdio: "ignore" }).unref();
 }
 
-async function runInteractivePicker(result) {
+function encodeReviewItem(hypothesis) {
+  return Buffer.from(JSON.stringify(hypothesis), "utf8")
+    .toString("base64")
+    .replace(/\+/g, "-")
+    .replace(/\//g, "_")
+    .replace(/=+$/g, "");
+}
+
+function openReviewSession(topic, hypothesis) {
+  const url = new URL("/review", REVIEW_APP_URL);
+  url.searchParams.set("topic", topic);
+  url.searchParams.set("item", encodeReviewItem(hypothesis));
+
+  openExternal(url.toString());
+  return url.toString();
+}
+
+function clearScreen() {
+  if (output.isTTY) {
+    output.write("\x1b[2J\x1b[H");
+  }
+}
+
+function evidenceDetailsForHypothesis(hypothesis, evidence) {
+  const refs = Array.isArray(hypothesis.evidence_refs) ? hypothesis.evidence_refs : [];
+  const pubmed = new Map((evidence?.pubmed ?? []).map((item) => [item.id, item]));
+  const openTargets = new Map((evidence?.open_targets ?? []).map((item) => [item.id, item]));
+
+  return refs.map((ref) => {
+    if (pubmed.has(ref)) {
+      const item = pubmed.get(ref);
+      return `PubMed :: ${item.title} (${item.pubdate || "date unknown"})`;
+    }
+
+    if (openTargets.has(ref)) {
+      const item = openTargets.get(ref);
+      return `Open Targets :: ${item.name} [${item.entity}]`;
+    }
+
+    return `Reference :: ${ref}`;
+  });
+}
+
+function formatHypothesisScreen(topic, hypothesis, index, evidence) {
+  const supportingEvidence = evidenceDetailsForHypothesis(hypothesis, evidence);
+  const evidenceLines =
+    supportingEvidence.length > 0
+      ? supportingEvidence.map((item) => `- ${item}`)
+      : ["No linked evidence details found"];
+  const evidenceRefLine =
+    Array.isArray(hypothesis.evidence_refs) && hypothesis.evidence_refs.length > 0
+      ? hypothesis.evidence_refs.join(", ")
+      : "none attached";
+
+  return [
+    color(`Topic :: ${topic}`, ANSI.dim),
+    "",
+    color(hypothesis.title, ANSI.green),
+    "",
+    color("How It Might Work", ANSI.cyan),
+    hypothesis.mechanism,
+    "",
+    color("Why It May Matter", ANSI.cyan),
+    hypothesis.rationale,
+    "",
+    color("Suggested Follow-Up", ANSI.cyan),
+    hypothesis.next_test,
+    "",
+    color("Assessment", ANSI.cyan),
+    `Novelty: ${hypothesis.novelty_score}/10`,
+    `Plausibility: ${hypothesis.plausibility_score}/10`,
+    "",
+    color("Linked Source Refs", ANSI.cyan),
+    evidenceRefLine,
+    "",
+    color("Supporting Sources", ANSI.cyan),
+    "Retrieved source material linked to this direction.",
+    "",
+    evidenceLines.join("\n")
+  ].join("\n");
+}
+
+function renderHypothesis(topic, hypothesis, index, evidence) {
+  clearScreen();
+  console.log(`\n${formatHypothesisScreen(topic, hypothesis, index, evidence)}\n`);
+}
+
+async function showHypothesisScreen(topic, hypothesis, index, evidence) {
+  renderHypothesis(topic, hypothesis, index, evidence);
+
   if (!input.isTTY || !output.isTTY) {
-    await runFallbackPicker(result);
+    const rl = readline.createInterface({ input, output });
+    try {
+      while (true) {
+        const answer = (await rl.question("Action: [Enter] back, [q] quit [o] open in browser: "))
+          .trim()
+          .toLowerCase();
+
+        if (answer === "") {
+          return "back";
+        }
+
+        if (answer === "o") {
+          console.log(
+            color(`Opened review :: ${openReviewSession(topic, hypothesis)}`, ANSI.cyan)
+          );
+          continue;
+        }
+
+        if (answer === "q") {
+          return "quit";
+        }
+
+        console.log(color("Invalid action. Use Enter, q, or o.", ANSI.amber));
+      }
+    } finally {
+      rl.close();
+    }
+  }
+
+  output.write("Action: [Enter] back, [q] quit [o] open in browser: ");
+
+  return new Promise((resolve, reject) => {
+    function cleanup() {
+      input.setRawMode(false);
+      input.pause();
+      input.off("data", onData);
+      output.write("\n");
+    }
+
+    function finish(value) {
+      cleanup();
+      resolve(value);
+    }
+
+    function onData(buffer) {
+      const key = buffer.toString("utf8").toLowerCase();
+
+      if (key === "\u0003") {
+        cleanup();
+        reject(new Error("Interrupted"));
+        return;
+      }
+
+      if (key === "\r" || key === "\n" || key === "\r\n") {
+        finish("back");
+        return;
+      }
+
+      if (key === "o") {
+        output.write(
+          color(`\nOpened review :: ${openReviewSession(topic, hypothesis)}\n`, ANSI.cyan)
+        );
+        output.write("Action: [Enter] back, [q] quit [o] open in browser: ");
+        return;
+      }
+
+      if (key === "q") {
+        finish("quit");
+        return;
+      }
+    }
+
+    input.setRawMode(true);
+    input.resume();
+    input.on("data", onData);
+  });
+}
+
+async function runInteractivePicker(result, evidence) {
+  if (!input.isTTY || !output.isTTY) {
+    await runFallbackPicker(result, evidence);
     return;
   }
 
@@ -512,24 +662,48 @@ async function runInteractivePicker(result) {
         color(`Remission paths for ${result.topic}`, ANSI.green),
         color("Pick a path with arrows and press Enter.", ANSI.dim)
       ],
-      footer: "Enter inspect  |  r raw JSON  |  q quit",
-      useAltScreen: true
+      footer: "Enter inspect  |  o open review page  |  q quit",
+      useAltScreen: true,
+      onKey(key, currentIndex) {
+        if (key.toLowerCase() === "o") {
+          return {
+            action: "open",
+            selectedIndex: currentIndex
+          };
+        }
+
+        return null;
+      }
     });
 
     if (selectedIndex === "quit") {
       return;
     }
 
-    if (selectedIndex === "raw") {
-      console.log(`\n${JSON.stringify(result, null, 2)}\n`);
+    if (selectedIndex?.action === "open") {
+      const chosenIndex = selectedIndex.selectedIndex;
+      console.log(
+        color(
+          `Opened review :: ${openReviewSession(result.topic, result.hypotheses[chosenIndex])}`,
+          ANSI.cyan
+        )
+      );
       continue;
     }
 
-    renderHypothesis(result.hypotheses[selectedIndex], selectedIndex);
+    const action = await showHypothesisScreen(
+      result.topic,
+      result.hypotheses[selectedIndex],
+      selectedIndex,
+      evidence
+    );
+    if (action === "quit") {
+      return;
+    }
   }
 }
 
-async function runFallbackPicker(result) {
+async function runFallbackPicker(result, evidence) {
   const rl = readline.createInterface({ input, output });
 
   try {
@@ -542,19 +716,33 @@ async function runFallbackPicker(result) {
         return;
       }
 
-      if (answer === "r") {
-        console.log(`\n${JSON.stringify(result, null, 2)}\n`);
-        continue;
+      if (answer.startsWith("o ")) {
+        const selectedIndex = Number(answer.slice(2).trim()) - 1;
+
+        if (Number.isInteger(selectedIndex) && result.hypotheses[selectedIndex]) {
+          console.log(
+            color(
+              `Opened review :: ${openReviewSession(result.topic, result.hypotheses[selectedIndex])}`,
+              ANSI.cyan
+            )
+          );
+          continue;
+        }
       }
 
       const selectedIndex = Number(answer) - 1;
       if (Number.isInteger(selectedIndex) && result.hypotheses[selectedIndex]) {
-        renderHypothesis(result.hypotheses[selectedIndex], selectedIndex);
-        console.log("Pick another path, [r] raw JSON, or [q] quit\n");
+        await showHypothesisScreen(
+          result.topic,
+          result.hypotheses[selectedIndex],
+          selectedIndex,
+          evidence
+        );
+        console.log("Pick another path, or [q] quit\n");
         continue;
       }
 
-      console.log("Use 1-10 to inspect a path, [r] for raw JSON, or [q] to quit.\n");
+      console.log("Use 1-10 to inspect a path, `o <number>` to open review page, or [q] to quit.\n");
     }
   } finally {
     rl.close();
@@ -573,9 +761,21 @@ async function start(options) {
 async function runStartMenu(options) {
   const mode = await selectWithArrows(
     [
-      { label: "Propose paths", value: "propose" },
-      { label: "Inspect evidence", value: "evidence" },
-      { label: "Quit", value: "quit" }
+      {
+        label: "Propose paths",
+        description: "Generate research directions from public biomedical evidence",
+        value: "propose"
+      },
+      {
+        label: "View sources",
+        description: "Review retrieved source material before generating paths",
+        value: "evidence"
+      },
+      {
+        label: "Quit",
+        description: "Exit Remission",
+        value: "quit"
+      }
     ],
     {
       header: [
@@ -616,15 +816,14 @@ async function selectTopic(rl) {
   const topicChoice = await selectWithArrows(
     [
       ...STARTER_TOPICS.map((topic) => ({ label: topic, value: topic })),
-      { label: "Custom topic...", value: "custom" },
-      { label: "Cancer type resource", value: "resource" }
+      { label: "Custom topic...", value: "custom" }
     ],
     {
       header: [
         color("Select a starting topic", ANSI.cyan),
         color("Pick a common cancer type or enter your own.", ANSI.dim)
       ],
-      footer: `Reference: ${NCI_CANCER_TYPES_URL}`,
+      footer: "Choose a topic, or use Custom topic... for a specific query",
       useAltScreen: true
     }
   );
@@ -633,22 +832,8 @@ async function selectTopic(rl) {
     return "";
   }
 
-  if (topicChoice === "resource") {
-    console.log("");
-    console.log(
-      makePanel("Cancer type resource", [
-        "National Cancer Institute A to Z list:",
-        NCI_CANCER_TYPES_URL,
-        "",
-        "Use this to find a cancer type, then return here and choose Custom topic",
-        "for a more specific query such as EGFR lung cancer or glioblastoma metabolism."
-      ])
-    );
-    console.log("");
-    return selectTopic(rl);
-  }
-
   if (topicChoice === "custom") {
+    console.log(`\nReference: ${NCI_CANCER_TYPES_URL}`);
     const customTopic = (await rl.question("Custom topic: ")).trim();
     return customTopic;
   }
@@ -663,7 +848,7 @@ async function runFallbackStart(options) {
     console.log("\nRemission\n");
     console.log("Discovery engine for cancer intervention paths.\n");
     console.log("1. Propose paths");
-    console.log("2. Inspect evidence");
+    console.log("2. View sources");
     console.log("q. Quit\n");
 
     const mode = (await rl.question("> ")).trim().toLowerCase();
@@ -698,12 +883,20 @@ async function selectWithArrows(options, config = {}) {
   const header = config.header ?? [];
   const clearOnRender = config.clearOnRender ?? true;
   const useAltScreen = config.useAltScreen ?? false;
+  const onKey = config.onKey ?? null;
 
   function render() {
     const headerLines = Array.isArray(header) ? header : [header];
-    const lines = options.map((option, index) =>
-      `${index === selectedIndex ? "> " : "  "}${option.label}`
-    );
+    const lines = options.flatMap((option, index) => {
+      const rendered = [`${index === selectedIndex ? "> " : "  "}${option.label}`];
+
+      if (option.description) {
+        rendered.push(`  ${color(option.description, ANSI.dim)}`);
+      }
+
+      rendered.push("");
+      return rendered;
+    });
 
     const rendered = [...headerLines, "", ...lines];
     if (footer) {
@@ -762,7 +955,7 @@ async function selectWithArrows(options, config = {}) {
         return;
       }
 
-      if (key === "\r") {
+      if (key === "\r" || key === "\n" || key === "\r\n") {
         finish(options[selectedIndex].value);
         return;
       }
@@ -772,9 +965,14 @@ async function selectWithArrows(options, config = {}) {
         return;
       }
 
-      if (key.toLowerCase() === "r") {
-        finish("raw");
+      if (onKey) {
+        const customResult = onKey(key, selectedIndex);
+
+        if (customResult !== null && customResult !== undefined) {
+          finish(customResult);
+        }
       }
+
     }
 
     if (useAltScreen) {
@@ -840,22 +1038,18 @@ async function propose(topic, options) {
     throw new Error("Missing API key. Use --api-key or set OPENROUTER_API_KEY in .env");
   }
 
-  const tracker = createStatusTracker();
-  tracker.start(topic);
+  const loader = createLoader();
   await showSignalAcquisition(topic);
-  tracker.update("Evidence retrieval", "Opening PubMed and Open Targets channels");
+  loader.start("Remission is gathering public source material...");
   const evidenceLogs = [];
   const evidence = await buildEvidencePack(topic, (message) => {
     evidenceLogs.push(message);
-    tracker.update("Evidence retrieval", message);
+    loader.update(`Remission is gathering public source material... ${message}`);
   });
-  tracker.update("Model query", `Sending grounded evidence to ${MODEL}`);
+  loader.update("Remission is talking with Nemotron 3 using your configured model...");
   const result = await callModel(topic, apiKey, evidence);
-  tracker.update("Ranking paths", `Scored ${result.hypotheses.length} candidate branches`);
-  await sleep(180);
-  tracker.complete("Ready", "Path map prepared");
-  await sleep(120);
-  tracker.stop();
+  loader.update(`Remission is ranking ${result.hypotheses.length} candidate paths...`);
+  loader.stop(color("Ready :: Path map prepared", ANSI.green));
 
   if (options.json) {
     console.log(JSON.stringify({ evidence, result }, null, 2));
@@ -865,17 +1059,21 @@ async function propose(topic, options) {
   console.log("");
   console.log(
     color(
-      makePanel("Evidence ingest", evidenceLogs.length > 0 ? evidenceLogs : ["no ingest logs"]),
+      makePanel("Source ingest", evidenceLogs.length > 0 ? evidenceLogs : ["no source logs"]),
       ANSI.dim
     )
   );
-  console.log(color("Grounded with public evidence from PubMed and Open Targets.", ANSI.green));
-  console.log("Use `npm run evidence -- \"topic\" --json` to inspect the raw evidence pack.\n");
-  await runInteractivePicker(result);
+  console.log(color("Grounded with public source material from PubMed and Open Targets.", ANSI.green));
+  console.log(color(`Open review page with "o" to fetch live browser data.`, ANSI.dim));
+  console.log("Use `npm run evidence -- \"topic\" --json` to inspect the raw source pack.\n");
+  await runInteractivePicker(result, evidence);
 }
 
 async function evidence(topic, options) {
+  const loader = createLoader();
+  loader.start("Remission is gathering public source material...");
   const result = await buildEvidencePack(topic);
+  loader.stop(color("Ready :: Source pack prepared", ANSI.green));
 
   if (options.json) {
     console.log(JSON.stringify(result, null, 2));
