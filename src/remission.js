@@ -202,8 +202,9 @@ function renderTwoColumn(leftTitle, leftLines, rightTitle, rightLines, width = 3
 function renderEvidencePanels(leftTitle, leftLines, rightTitle, rightLines) {
   const total = terminalWidth();
   const twoColumnWidth = Math.floor((total - 1) / 2);
+  const longestTitle = Math.max(visibleLength(leftTitle), visibleLength(rightTitle));
 
-  if (twoColumnWidth < 26) {
+  if (twoColumnWidth < 30 || longestTitle > twoColumnWidth - 6) {
     return [
       renderSingleColumn(leftTitle, leftLines, total),
       "",
@@ -435,13 +436,25 @@ async function fetchReactomeEvidence(topic) {
   const data = await fetchJson(url);
   const entries = Array.isArray(data?.results) ? data.results : Array.isArray(data) ? data : [];
 
-  return entries.slice(0, 5).map((item) => ({
-    id: `reactome:${item.stId || item.id || item.dbId}`,
-    name: item.name || item.displayName || "Unnamed pathway",
-    species: item.species?.[0]?.displayName || item.speciesName || "",
-    source: "Reactome",
-    url: item.stId ? `https://reactome.org/content/detail/${item.stId}` : "https://reactome.org/"
-  }));
+  return entries
+    .map((item) => {
+      const stableId = item.stId || item.id || item.dbId || "";
+      const name = item.name || item.displayName || "";
+
+      if (!stableId || !name) {
+        return null;
+      }
+
+      return {
+        id: `reactome:${stableId}`,
+        name,
+        species: item.species?.[0]?.displayName || item.speciesName || "",
+        source: "Reactome",
+        url: item.stId ? `https://reactome.org/content/detail/${item.stId}` : "https://reactome.org/"
+      };
+    })
+    .filter(Boolean)
+    .slice(0, 5);
 }
 
 async function fetchClinicalTrialsEvidence(topic) {
