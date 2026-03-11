@@ -10,6 +10,8 @@ const OPENROUTER_URL = "https://openrouter.ai/api/v1/chat/completions";
 const PUBMED_SEARCH_URL = "https://eutils.ncbi.nlm.nih.gov/entrez/eutils/esearch.fcgi";
 const PUBMED_SUMMARY_URL = "https://eutils.ncbi.nlm.nih.gov/entrez/eutils/esummary.fcgi";
 const OPEN_TARGETS_URL = "https://api.platform.opentargets.org/api/v4/graphql";
+const REACTOME_SEARCH_URL = "https://reactome.org/ContentService/search/query";
+const CLINICAL_TRIALS_URL = "https://clinicaltrials.gov/api/query/study_fields";
 const NCI_CANCER_TYPES_URL = "https://www.cancer.gov/types";
 const REVIEW_APP_URL = process.env.REMISSION_REVIEW_APP_URL || "https://remission-sigma.vercel.app";
 const STARTER_TOPICS = [
@@ -424,20 +426,65 @@ async function fetchOpenTargetsEvidence(topic) {
   }));
 }
 
+async function fetchReactomeEvidence(topic) {
+  const url = new URL(REACTOME_SEARCH_URL);
+  url.searchParams.set("query", topic);
+  url.searchParams.set("types", "Pathway");
+  url.searchParams.set("cluster", "true");
+
+  const data = await fetchJson(url);
+  const entries = Array.isArray(data?.results) ? data.results : Array.isArray(data) ? data : [];
+
+  return entries.slice(0, 5).map((item) => ({
+    id: `reactome:${item.stId || item.id || item.dbId}`,
+    name: item.name || item.displayName || "Unnamed pathway",
+    species: item.species?.[0]?.displayName || item.speciesName || "",
+    source: "Reactome",
+    url: item.stId ? `https://reactome.org/content/detail/${item.stId}` : "https://reactome.org/"
+  }));
+}
+
+async function fetchClinicalTrialsEvidence(topic) {
+  const url = new URL(CLINICAL_TRIALS_URL);
+  url.searchParams.set("expr", topic);
+  url.searchParams.set("fields", "NCTId,BriefTitle,Condition,Phase");
+  url.searchParams.set("min_rnk", "1");
+  url.searchParams.set("max_rnk", "5");
+  url.searchParams.set("fmt", "json");
+
+  const data = await fetchJson(url);
+  const studies = data?.StudyFieldsResponse?.StudyFields ?? [];
+
+  return studies.map((study) => ({
+    id: `trial:${study.NCTId?.[0] || "unknown"}`,
+    title: study.BriefTitle?.[0] || "Untitled trial",
+    condition: study.Condition?.[0] || "",
+    phase: study.Phase?.[0] || "",
+    source: "ClinicalTrials.gov",
+    url: study.NCTId?.[0] ? `https://clinicaltrials.gov/study/${study.NCTId[0]}` : "https://clinicaltrials.gov/"
+  }));
+}
+
 async function buildEvidencePack(topic, onEvent) {
   onEvent?.(`pubmed search :: ${topic}`);
-  const [pubmed, openTargets] = await Promise.all([
+  const [pubmed, openTargets, reactome, clinicalTrials] = await Promise.all([
     fetchPubMedEvidence(topic).catch(() => []),
-    fetchOpenTargetsEvidence(topic).catch(() => [])
+    fetchOpenTargetsEvidence(topic).catch(() => []),
+    fetchReactomeEvidence(topic).catch(() => []),
+    fetchClinicalTrialsEvidence(topic).catch(() => [])
   ]);
   onEvent?.(`pubmed hits :: ${pubmed.length}`);
   onEvent?.(`open targets hits :: ${openTargets.length}`);
+  onEvent?.(`reactome hits :: ${reactome.length}`);
+  onEvent?.(`clinical trials hits :: ${clinicalTrials.length}`);
 
   return {
     topic,
     retrieved_at: new Date().toISOString(),
     pubmed,
-    open_targets: openTargets
+    open_targets: openTargets,
+    reactome,
+    clinical_trials: clinicalTrials
   };
 }
 
@@ -456,9 +503,25 @@ function renderEvidence(evidence) {
           `${item.name} [${item.entity}]`,
           item.description || item.id
         ]);
+  const reactomeLines =
+    evidence.reactome.length === 0
+      ? ["no results"]
+      : evidence.reactome.flatMap((item) => [
+          item.name,
+          `${item.species || "species unknown"} :: ${item.id}`
+        ]);
+  const trialLines =
+    evidence.clinical_trials.length === 0
+      ? ["no results"]
+      : evidence.clinical_trials.flatMap((item) => [
+          item.title,
+          `${item.phase || "phase unknown"} :: ${item.id}`
+        ]);
 
   console.log(`\n${color(`Source pack for ${evidence.topic}`, ANSI.green)}\n`);
   console.log(renderEvidencePanels("PubMed", pubmedLines, "Open Targets", targetLines));
+  console.log("");
+  console.log(renderEvidencePanels("Reactome", reactomeLines, "ClinicalTrials.gov", trialLines));
   console.log("");
 }
 
@@ -503,6 +566,8 @@ function evidenceDetailsForHypothesis(hypothesis, evidence) {
   const refs = Array.isArray(hypothesis.evidence_refs) ? hypothesis.evidence_refs : [];
   const pubmed = new Map((evidence?.pubmed ?? []).map((item) => [item.id, item]));
   const openTargets = new Map((evidence?.open_targets ?? []).map((item) => [item.id, item]));
+  const reactome = new Map((evidence?.reactome ?? []).map((item) => [item.id, item]));
+  const clinicalTrials = new Map((evidence?.clinical_trials ?? []).map((item) => [item.id, item]));
 
   return refs.map((ref) => {
     if (pubmed.has(ref)) {
@@ -513,6 +578,16 @@ function evidenceDetailsForHypothesis(hypothesis, evidence) {
     if (openTargets.has(ref)) {
       const item = openTargets.get(ref);
       return `Open Targets :: ${item.name} [${item.entity}]`;
+    }
+
+    if (reactome.has(ref)) {
+      const item = reactome.get(ref);
+      return `Reactome :: ${item.name}${item.species ? ` (${item.species})` : ""}`;
+    }
+
+    if (clinicalTrials.has(ref)) {
+      const item = clinicalTrials.get(ref);
+      return `ClinicalTrials.gov :: ${item.title}${item.phase ? ` (${item.phase})` : ""}`;
     }
 
     return `Reference :: ${ref}`;
