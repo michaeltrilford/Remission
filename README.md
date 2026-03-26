@@ -51,6 +51,7 @@ Suggested sources:
 - [Open Targets](https://platform.opentargets.org/)
 - [Reactome](https://reactome.org/)
 - [ClinicalTrials.gov](https://clinicaltrials.gov/data-api/about-api)
+- [NZ Legislation Developer API](https://www.legislation.govt.nz/learn-more/legislation-data/developer-api/)
 - [cBioPortal](https://www.cbioportal.org/)
 - [GDC / TCGA](https://portal.gdc.cancer.gov/)
 - [DepMap](https://depmap.org/portal/)
@@ -58,19 +59,9 @@ Suggested sources:
 
 Use only source material whose terms, licensing, and access conditions fit your intended use.
 
-## Safe Framing
+## Research Use
 
-Preferred description:
-
-`Remission consolidates public biomedical source material into model-generated research directions to support cancer research exploration.`
-
-Avoid stronger claims such as:
-
-- finding cures
-- making treatment recommendations
-- validating hypotheses
-- diagnosing disease
-- producing clinical guidance
+Remission uses public and research-accessible source material to generate structured research directions for exploration and review. It is intended for research-support workflows, not clinical use.
 
 ## Reference
 
