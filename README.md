@@ -16,11 +16,16 @@ Remission is a research-support tool. It is not a diagnostic system, treatment r
 
 ## Quick Start
 
-Add your key to `.env`:
+Set up a local `.env` file in the repo root:
 
 ```env
-OPENROUTER_API_KEY=your_key_here
+# Local secrets only. Do not commit.
+OPENROUTER_API_KEY=sk-...
+REMISSION_REVIEW_APP_URL=https://remission-sigma.vercel.app
+NZ_LEGISLATION_API_KEY=nzlapi-...
 ```
+
+Never commit `.env` to GitHub. Keep API keys local only.
 
 Then launch:
 
