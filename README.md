@@ -22,6 +22,7 @@ Set up a local `.env` file in the repo root:
 # Local secrets only. Do not commit.
 OPENROUTER_API_KEY=sk-...
 REMISSION_REVIEW_APP_URL=https://remission-sigma.vercel.app
+# Optional. Enables NZ Legislation source retrieval.
 NZ_LEGISLATION_API_KEY=nzlapi-...
 ```
 
@@ -38,6 +39,7 @@ npm run start
 - supports local `.env` usage by default
 - also supports passing a user-provided API key at runtime
 - includes a guided terminal experience for topic selection and path exploration
+- optionally adds Ministry of Health legislation search results when `NZ_LEGISLATION_API_KEY` is set
 
 ## Source Material
 

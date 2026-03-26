@@ -12,8 +12,8 @@ const PUBMED_SUMMARY_URL = "https://eutils.ncbi.nlm.nih.gov/entrez/eutils/esumma
 const OPEN_TARGETS_URL = "https://api.platform.opentargets.org/api/v4/graphql";
 const REACTOME_SEARCH_URL = "https://reactome.org/ContentService/search/query";
 const CLINICAL_TRIALS_URL = "https://clinicaltrials.gov/api/query/study_fields";
+const NZ_LEGISLATION_WORKS_URL = "https://api.legislation.govt.nz/v0/works/";
 const NCI_CANCER_TYPES_URL = "https://www.cancer.gov/types";
-const REVIEW_APP_URL = process.env.REMISSION_REVIEW_APP_URL || "https://remission-sigma.vercel.app";
 const STARTER_TOPICS = [
   "Lung Cancer",
   "Breast Cancer",
@@ -85,6 +85,10 @@ Examples:
   npm run propose -- "KRAS lung cancer" --api-key "or-your-key"
   npm run propose -- "KRAS lung cancer" --json
 `.trim());
+}
+
+function reviewAppUrl() {
+  return process.env.REMISSION_REVIEW_APP_URL || "https://remission-sigma.vercel.app";
 }
 
 function color(text, value) {
@@ -478,18 +482,65 @@ async function fetchClinicalTrialsEvidence(topic) {
   }));
 }
 
+async function fetchNzLegislationEvidence(topic) {
+  const apiKey = process.env.NZ_LEGISLATION_API_KEY;
+
+  if (!apiKey) {
+    return [];
+  }
+
+  const url = new URL(NZ_LEGISLATION_WORKS_URL);
+  url.searchParams.set("search_term", topic);
+  url.searchParams.set("search_field", "content");
+  url.searchParams.set("page", "1");
+  url.searchParams.set("per_page", "5");
+  url.searchParams.set("legislation_status", "in_force");
+  url.searchParams.set("administering_agencies", "Ministry of Health");
+  url.searchParams.set("sort_by", "most_recently_updated");
+
+  const data = await fetchJson(url, {
+    headers: {
+      "X-Api-Key": apiKey
+    }
+  });
+
+  return (data?.results ?? []).map((item) => {
+    const latestVersion = item.latest_matching_version ?? {};
+    const formats = Array.isArray(latestVersion.formats) ? latestVersion.formats : [];
+    const htmlFormat =
+      formats.find((format) => format.type === "html") ??
+      formats.find((format) => format.type === "pdf") ??
+      formats[0];
+
+    return {
+      id: `nzlegislation:${item.work_id}`,
+      title: latestVersion.title || item.work_id,
+      work_id: item.work_id,
+      version_id: latestVersion.version_id || "",
+      legislation_type: item.legislation_type || "",
+      agencies: Array.isArray(item.administering_agencies) ? item.administering_agencies : [],
+      source: "NZ Legislation",
+      url: htmlFormat?.url || "https://www.legislation.govt.nz/"
+    };
+  });
+}
+
 async function buildEvidencePack(topic, onEvent) {
   onEvent?.(`pubmed search :: ${topic}`);
-  const [pubmed, openTargets, reactome, clinicalTrials] = await Promise.all([
+  const [pubmed, openTargets, reactome, clinicalTrials, nzLegislation] = await Promise.all([
     fetchPubMedEvidence(topic).catch(() => []),
     fetchOpenTargetsEvidence(topic).catch(() => []),
     fetchReactomeEvidence(topic).catch(() => []),
-    fetchClinicalTrialsEvidence(topic).catch(() => [])
+    fetchClinicalTrialsEvidence(topic).catch(() => []),
+    fetchNzLegislationEvidence(topic).catch(() => [])
   ]);
   onEvent?.(`pubmed hits :: ${pubmed.length}`);
   onEvent?.(`open targets hits :: ${openTargets.length}`);
   onEvent?.(`reactome hits :: ${reactome.length}`);
   onEvent?.(`clinical trials hits :: ${clinicalTrials.length}`);
+  if (process.env.NZ_LEGISLATION_API_KEY) {
+    onEvent?.(`nz legislation hits :: ${nzLegislation.length}`);
+  }
 
   return {
     topic,
@@ -497,7 +548,8 @@ async function buildEvidencePack(topic, onEvent) {
     pubmed,
     open_targets: openTargets,
     reactome,
-    clinical_trials: clinicalTrials
+    clinical_trials: clinicalTrials,
+    nz_legislation: nzLegislation
   };
 }
 
@@ -530,11 +582,22 @@ function renderEvidence(evidence) {
           item.title,
           `${item.phase || "phase unknown"} :: ${item.id}`
         ]);
+  const legislationLines =
+    (evidence.nz_legislation ?? []).length === 0
+      ? ["no results"]
+      : evidence.nz_legislation.flatMap((item) => [
+          item.title,
+          `${item.legislation_type || "type unknown"} :: ${item.id}`
+        ]);
 
   console.log(`\n${color(`Source pack for ${evidence.topic}`, ANSI.green)}\n`);
   console.log(renderEvidencePanels("PubMed", pubmedLines, "Open Targets", targetLines));
   console.log("");
   console.log(renderEvidencePanels("Reactome", reactomeLines, "ClinicalTrials.gov", trialLines));
+  if (process.env.NZ_LEGISLATION_API_KEY) {
+    console.log("");
+    console.log(renderSingleColumn("NZ Legislation", legislationLines, terminalWidth()));
+  }
   console.log("");
 }
 
@@ -561,7 +624,7 @@ function encodeReviewItem(hypothesis) {
 }
 
 function openReviewSession(topic, hypothesis) {
-  const url = new URL("/review", REVIEW_APP_URL);
+  const url = new URL("/review", reviewAppUrl());
   url.searchParams.set("topic", topic);
   url.searchParams.set("item", encodeReviewItem(hypothesis));
 
@@ -581,6 +644,7 @@ function evidenceDetailsForHypothesis(hypothesis, evidence) {
   const openTargets = new Map((evidence?.open_targets ?? []).map((item) => [item.id, item]));
   const reactome = new Map((evidence?.reactome ?? []).map((item) => [item.id, item]));
   const clinicalTrials = new Map((evidence?.clinical_trials ?? []).map((item) => [item.id, item]));
+  const nzLegislation = new Map((evidence?.nz_legislation ?? []).map((item) => [item.id, item]));
 
   return refs.map((ref) => {
     if (pubmed.has(ref)) {
@@ -601,6 +665,12 @@ function evidenceDetailsForHypothesis(hypothesis, evidence) {
     if (clinicalTrials.has(ref)) {
       const item = clinicalTrials.get(ref);
       return `ClinicalTrials.gov :: ${item.title}${item.phase ? ` (${item.phase})` : ""}`;
+    }
+
+    if (nzLegislation.has(ref)) {
+      const item = nzLegislation.get(ref);
+      const agency = item.agencies?.[0];
+      return `NZ Legislation :: ${item.title}${agency ? ` (${agency})` : ""}`;
     }
 
     return `Reference :: ${ref}`;
@@ -1151,13 +1221,15 @@ async function propose(topic, options) {
       ANSI.dim
     )
   );
-  console.log(color("Grounded with public source material from PubMed and Open Targets.", ANSI.green));
+  console.log(color("Grounded with retrieved source material across connected public sources.", ANSI.green));
   console.log(color(`Open review page with "o" to fetch live browser data.`, ANSI.dim));
   console.log("Use `npm run evidence -- \"topic\" --json` to inspect the raw source pack.\n");
   await runInteractivePicker(result, evidence);
 }
 
 async function evidence(topic, options) {
+  loadEnvFile();
+
   const loader = createLoader();
   loader.start("Remission is gathering public source material...");
   const result = await buildEvidencePack(topic);
@@ -1172,6 +1244,8 @@ async function evidence(topic, options) {
 }
 
 async function main() {
+  loadEnvFile();
+
   const [, , command, ...rawArgs] = process.argv;
 
   if (!command || command === "--help" || command === "-h") {
