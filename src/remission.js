@@ -5,7 +5,7 @@ import readline from "node:readline/promises";
 import { stdin as input, stdout as output } from "node:process";
 import ora from "ora";
 
-const MODEL = "nvidia/nemotron-3-nano-30b-a3b:free";
+const MODEL = "nvidia/nemotron-3-nano-30b-a3b";
 const OPENROUTER_URL = "https://openrouter.ai/api/v1/chat/completions";
 const PUBMED_SEARCH_URL = "https://eutils.ncbi.nlm.nih.gov/entrez/eutils/esearch.fcgi";
 const PUBMED_SUMMARY_URL = "https://eutils.ncbi.nlm.nih.gov/entrez/eutils/esummary.fcgi";
@@ -28,12 +28,14 @@ const STARTER_TOPICS = [
 ];
 const ANSI = {
   reset: "\x1b[0m",
-  dim: "\x1b[2m",
-  bright: "\x1b[1m",
-  green: "\x1b[32m",
-  cyan: "\x1b[36m",
-  amber: "\x1b[33m",
-  red: "\x1b[31m"
+  // Muibook dark theme: grey surfaces/text with blue, green, orange, and red states.
+  dim: "\x1b[38;2;170;170;170m", // grey-400
+  bright: "\x1b[1;38;2;242;242;242m", // grey-50
+  border: "\x1b[38;2;102;102;102m", // grey-600
+  green: "\x1b[38;2;1;191;53m", // green-500
+  cyan: "\x1b[38;2;89;175;244m", // blue-500
+  amber: "\x1b[38;2;246;163;34m", // orange-500
+  red: "\x1b[38;2;226;73;71m" // red-500
 };
 
 function loadEnvFile() {
@@ -164,11 +166,12 @@ function makePanel(title, lines, width = panelWidth()) {
   });
   const renderedLines = expandedLines.map((line) => `│ ${padVisible(line, innerWidth)} │`);
   const titleWidth = visibleLength(title);
+  const border = (value) => color(value, ANSI.border);
 
   return [
-    `┌─ ${title}${"─".repeat(Math.max(0, width - titleWidth - 5))}┐`,
-    ...renderedLines,
-    `└${"─".repeat(width - 2)}┘`
+    `${border("┌─ ")}${color(title, ANSI.bright)}${border("─".repeat(Math.max(0, width - titleWidth - 5)) + "┐")}`,
+    ...renderedLines.map((line) => `${border("│")} ${line.slice(2, -2)} ${border("│")}`),
+    border(`└${"─".repeat(width - 2)}┘`)
   ].join("\n");
 }
 
@@ -190,16 +193,16 @@ function renderTwoColumn(leftTitle, leftLines, rightTitle, rightLines, width = 3
   const rightTitleWidth = visibleLength(rightTitle);
 
   rows.push(
-    `┌─${leftTitle}${"─".repeat(Math.max(0, width - leftTitleWidth - 3))}┐ ┌─${rightTitle}${"─".repeat(Math.max(0, width - rightTitleWidth - 3))}┐`
+    `${color("┌─", ANSI.border)}${color(leftTitle, ANSI.bright)}${color("─".repeat(Math.max(0, width - leftTitleWidth - 3)) + "┐", ANSI.border)} ${color("┌─", ANSI.border)}${color(rightTitle, ANSI.bright)}${color("─".repeat(Math.max(0, width - rightTitleWidth - 3)) + "┐", ANSI.border)}`
   );
 
   for (let index = 0; index < left.length; index += 1) {
     const leftLine = padVisible(left[index].slice(0, innerWidth), innerWidth);
     const rightLine = padVisible(right[index].slice(0, innerWidth), innerWidth);
-    rows.push(`│ ${leftLine} │ │ ${rightLine} │`);
+    rows.push(`${color("│", ANSI.border)} ${leftLine} ${color("│", ANSI.border)} ${color("│", ANSI.border)} ${rightLine} ${color("│", ANSI.border)}`);
   }
 
-  rows.push(`└${"─".repeat(width - 2)}┘ └${"─".repeat(width - 2)}┘`);
+  rows.push(`${color(`└${"─".repeat(width - 2)}┘`, ANSI.border)} ${color(`└${"─".repeat(width - 2)}┘`, ANSI.border)}`);
   return rows.join("\n");
 }
 
