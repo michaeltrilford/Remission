@@ -5,14 +5,23 @@ import readline from "node:readline/promises";
 import { stdin as input, stdout as output } from "node:process";
 import ora from "ora";
 
-const MODEL = "nvidia/nemotron-3-nano-30b-a3b";
+const DEFAULT_MODEL = "nvidia/nemotron-3.5-lightning:free";
 const OPENROUTER_URL = "https://openrouter.ai/api/v1/chat/completions";
 const PUBMED_SEARCH_URL = "https://eutils.ncbi.nlm.nih.gov/entrez/eutils/esearch.fcgi";
 const PUBMED_SUMMARY_URL = "https://eutils.ncbi.nlm.nih.gov/entrez/eutils/esummary.fcgi";
 const OPEN_TARGETS_URL = "https://api.platform.opentargets.org/api/v4/graphql";
 const REACTOME_SEARCH_URL = "https://reactome.org/ContentService/search/query";
-const CLINICAL_TRIALS_URL = "https://clinicaltrials.gov/api/query/study_fields";
+const CLINICAL_TRIALS_URL = "https://clinicaltrials.gov/api/v2/studies";
 const NZ_LEGISLATION_WORKS_URL = "https://api.legislation.govt.nz/v0/works/";
+const CBIOPORTAL_STUDIES_URL = "https://www.cbioportal.org/api/studies";
+const DEPMAP_DOWNLOAD_FILES_URL = "https://depmap.org/portal/api/no-captcha/download/files";
+const CHEMBL_TARGET_SEARCH_URL = "https://www.ebi.ac.uk/chembl/api/data/target/search.json";
+const CIVIC_GRAPHQL_URL = "https://civicdb.org/api/graphql";
+const GDC_PROJECTS_URL = "https://api.gdc.cancer.gov/projects";
+const PUBLIC_SOURCE_HEADERS = {
+  Accept: "application/json",
+  "User-Agent": "Remission/0.1 (+https://github.com/michaeltrilford/Remission)"
+};
 const NCI_CANCER_TYPES_URL = "https://www.cancer.gov/types";
 const STARTER_TOPICS = [
   "Lung Cancer",
@@ -86,6 +95,9 @@ Examples:
   npm run evidence -- "glioblastoma metabolism"
   npm run propose -- "KRAS lung cancer" --api-key "or-your-key"
   npm run propose -- "KRAS lung cancer" --json
+
+Environment:
+  REMISSION_MODEL  Optional override; defaults to nvidia/nemotron-3.5-lightning:free
 `.trim());
 }
 
@@ -303,19 +315,35 @@ function parseArgs(args) {
 }
 
 function normalizeResponse(content) {
-  let parsed;
+  const normalizedContent = String(content).trim();
+  const candidates = [
+    normalizedContent,
+    normalizedContent.replace(/^```(?:json)?\s*/i, "").replace(/\s*```$/, "")
+  ];
+  const objectStart = normalizedContent.indexOf("{");
+  const objectEnd = normalizedContent.lastIndexOf("}");
 
-  try {
-    parsed = JSON.parse(content);
-  } catch {
-    throw new Error("Model returned invalid JSON");
+  if (objectStart >= 0 && objectEnd > objectStart) {
+    candidates.push(normalizedContent.slice(objectStart, objectEnd + 1));
   }
 
-  if (!parsed || !Array.isArray(parsed.hypotheses) || parsed.hypotheses.length === 0) {
-    throw new Error("Model response did not include hypotheses");
+  for (const candidate of candidates) {
+    try {
+      const parsed = JSON.parse(candidate);
+
+      if (parsed && Array.isArray(parsed.hypotheses) && parsed.hypotheses.length > 0) {
+        return parsed;
+      }
+    } catch {
+      // Try the next representation so free endpoints can return fenced JSON.
+    }
   }
 
-  return parsed;
+  throw new Error("Model returned invalid JSON or did not include hypotheses");
+}
+
+function configuredModel() {
+  return process.env.REMISSION_MODEL || DEFAULT_MODEL;
 }
 
 function buildPrompt(topic, evidence) {
@@ -414,7 +442,9 @@ async function fetchOpenTargetsEvidence(topic) {
   const data = await fetchJson(OPEN_TARGETS_URL, {
     method: "POST",
     headers: {
-      "Content-Type": "application/json"
+      "Content-Type": "application/json",
+      Accept: "application/json",
+      "User-Agent": "Remission/0.1 (+https://github.com/michaeltrilford/Remission)"
     },
     body: JSON.stringify({
       query,
@@ -423,6 +453,10 @@ async function fetchOpenTargetsEvidence(topic) {
       }
     })
   });
+
+  if (Array.isArray(data.errors) && data.errors.length > 0) {
+    throw new Error(data.errors.map((error) => error.message).join("; "));
+  }
 
   return (data.data?.search?.hits ?? []).map((hit) => ({
     id: `opentargets:${hit.id}`,
@@ -441,12 +475,19 @@ async function fetchReactomeEvidence(topic) {
   url.searchParams.set("cluster", "true");
 
   const data = await fetchJson(url);
-  const entries = Array.isArray(data?.results) ? data.results : Array.isArray(data) ? data : [];
+  const entries = Array.isArray(data?.results)
+    ? data.results.flatMap((group) => (Array.isArray(group?.entries) ? group.entries : [group]))
+    : Array.isArray(data)
+      ? data
+      : [];
 
   return entries
     .map((item) => {
       const stableId = item.stId || item.id || item.dbId || "";
-      const name = item.name || item.displayName || "";
+      const name = String(item.name || item.displayName || "").replace(/<[^>]+>/g, "");
+      const species = Array.isArray(item.species)
+        ? item.species[0]?.displayName || item.species[0] || ""
+        : item.speciesName || "";
 
       if (!stableId || !name) {
         return null;
@@ -455,7 +496,7 @@ async function fetchReactomeEvidence(topic) {
       return {
         id: `reactome:${stableId}`,
         name,
-        species: item.species?.[0]?.displayName || item.speciesName || "",
+        species,
         source: "Reactome",
         url: item.stId ? `https://reactome.org/content/detail/${item.stId}` : "https://reactome.org/"
       };
@@ -466,22 +507,205 @@ async function fetchReactomeEvidence(topic) {
 
 async function fetchClinicalTrialsEvidence(topic) {
   const url = new URL(CLINICAL_TRIALS_URL);
-  url.searchParams.set("expr", topic);
-  url.searchParams.set("fields", "NCTId,BriefTitle,Condition,Phase");
-  url.searchParams.set("min_rnk", "1");
-  url.searchParams.set("max_rnk", "5");
-  url.searchParams.set("fmt", "json");
+  url.searchParams.set("query.term", topic);
+  url.searchParams.set("pageSize", "5");
 
   const data = await fetchJson(url);
-  const studies = data?.StudyFieldsResponse?.StudyFields ?? [];
+  const studies = data?.studies ?? [];
 
-  return studies.map((study) => ({
-    id: `trial:${study.NCTId?.[0] || "unknown"}`,
-    title: study.BriefTitle?.[0] || "Untitled trial",
-    condition: study.Condition?.[0] || "",
-    phase: study.Phase?.[0] || "",
-    source: "ClinicalTrials.gov",
-    url: study.NCTId?.[0] ? `https://clinicaltrials.gov/study/${study.NCTId[0]}` : "https://clinicaltrials.gov/"
+  return studies.map((study) => {
+    const protocol = study.protocolSection ?? {};
+    const identification = protocol.identificationModule ?? {};
+    const conditions = protocol.conditionsModule?.conditions ?? [];
+    const phases = protocol.designModule?.phases ?? [];
+    const nctId = identification.nctId || "unknown";
+
+    return {
+      id: `trial:${nctId}`,
+      title: identification.briefTitle || "Untitled trial",
+      condition: conditions[0] || "",
+      phase: phases.join(", "),
+      source: "ClinicalTrials.gov",
+      url: nctId !== "unknown" ? `https://clinicaltrials.gov/study/${nctId}` : "https://clinicaltrials.gov/"
+    };
+  });
+}
+
+async function fetchCbioPortalEvidence(topic) {
+  const url = new URL(CBIOPORTAL_STUDIES_URL);
+  url.searchParams.set("keyword", topic);
+  url.searchParams.set("projection", "SUMMARY");
+  url.searchParams.set("pageSize", "5");
+
+  const data = await fetchJson(url, { headers: PUBLIC_SOURCE_HEADERS });
+
+  return (Array.isArray(data) ? data : []).slice(0, 5).map((study) => ({
+    id: `cbioportal:${study.studyId}`,
+    name: study.name || study.studyId,
+    description: study.description || "",
+    cancer_type: study.cancerTypeId || "",
+    sample_count: study.allSampleCount ?? null,
+    pmid: study.pmid || "",
+    source: "cBioPortal",
+    url: `https://www.cbioportal.org/study/summary?id=${encodeURIComponent(study.studyId)}`
+  }));
+}
+
+async function fetchDepMapEvidence(topic) {
+  const response = await fetch(DEPMAP_DOWNLOAD_FILES_URL, {
+    headers: {
+      Accept: "text/csv",
+      "User-Agent": PUBLIC_SOURCE_HEADERS["User-Agent"]
+    }
+  });
+
+  if (!response.ok) {
+    const errorBody = await response.text();
+    throw new Error(`Request failed ${response.status}: ${errorBody}`);
+  }
+
+  const rows = (await response.text())
+    .trim()
+    .split(/\r?\n/)
+    .slice(1)
+    .map((line) => line.split(","))
+    .filter((columns) => columns.length >= 3);
+  const relevantRows = rows
+    .filter(([, , filename]) => /dependency|gene.?effect|screen|sensitivity|compound/i.test(filename))
+    .slice(0, 5);
+
+  return relevantRows.map(([release, releaseDate, filename, fileUrl]) => ({
+    id: `depmap:${release}:${filename}`,
+    name: filename,
+    description: `Current ${release} dataset for ${topic}; release date ${releaseDate}.`,
+    release,
+    release_date: releaseDate,
+    source: "DepMap",
+    url: fileUrl || "https://depmap.org/portal/data_page/?tab=currentRelease"
+  }));
+}
+
+async function fetchChemblEvidence(topic) {
+  const url = new URL(CHEMBL_TARGET_SEARCH_URL);
+  url.searchParams.set("q", topic);
+  url.searchParams.set("limit", "5");
+
+  const data = await fetchJson(url, { headers: PUBLIC_SOURCE_HEADERS });
+  const targets = Array.isArray(data?.targets) ? data.targets : [];
+
+  return targets.map((target) => {
+    const geneSymbols = (target.target_components ?? [])
+      .flatMap((component) => component.target_component_synonyms ?? [])
+      .filter((synonym) => synonym.syn_type === "GENE_SYMBOL")
+      .map((synonym) => synonym.synonyms)
+      .filter(Boolean);
+
+    return {
+      id: `chembl:${target.target_chembl_id}`,
+      name: target.pref_name || target.target_chembl_id,
+      description: `${target.organism || "Unknown organism"}${geneSymbols.length > 0 ? ` :: ${geneSymbols.join(", ")}` : ""}`,
+      target_chembl_id: target.target_chembl_id,
+      source: "ChEMBL",
+      url: `https://www.ebi.ac.uk/chembl/explore/target/${target.target_chembl_id}`
+    };
+  });
+}
+
+async function fetchCivicEvidence(topic) {
+  const query = `
+    query EvidenceItems($diseaseName: String!, $first: Int!) {
+      evidenceItems(diseaseName: $diseaseName, first: $first) {
+        nodes {
+          id
+          name
+          description
+          evidenceType
+          evidenceLevel
+          evidenceRating
+          evidenceDirection
+          significance
+          link
+        }
+      }
+    }
+  `;
+  const data = await fetchJson(CIVIC_GRAPHQL_URL, {
+    method: "POST",
+    headers: {
+      ...PUBLIC_SOURCE_HEADERS,
+      "Content-Type": "application/json"
+    },
+    body: JSON.stringify({
+      query,
+      variables: { diseaseName: topic, first: 5 }
+    })
+  });
+
+  if (Array.isArray(data.errors) && data.errors.length > 0) {
+    throw new Error(data.errors.map((error) => error.message).join("; "));
+  }
+
+  return (data.data?.evidenceItems?.nodes ?? []).map((item) => ({
+    id: `civic:${item.id}`,
+    name: item.name || `EID${item.id}`,
+    description: item.description || "",
+    evidence_type: item.evidenceType || "",
+    evidence_level: item.evidenceLevel || "",
+    evidence_rating: item.evidenceRating ?? null,
+    evidence_direction: item.evidenceDirection || "",
+    significance: item.significance || "",
+    source: "CIViC",
+    url: `https://civicdb.org${item.link || `/evidence/${item.id}`}`
+  }));
+}
+
+function gdcPrimarySitesForTopic(topic) {
+  const aliases = [
+    [/breast/i, ["Breast"]],
+    [/lung/i, ["Bronchus and lung"]],
+    [/colorectal|colon/i, ["Colon", "Rectum"]],
+    [/pancrea/i, ["Pancreas"]],
+    [/prostate/i, ["Prostate gland"]],
+    [/melanoma|skin/i, ["Skin"]],
+    [/glioblastoma|brain/i, ["Brain"]],
+    [/leukemia|lymphoma/i, ["Blood"]],
+    [/ovarian|ovary/i, ["Ovary"]]
+  ];
+
+  return aliases.filter(([pattern]) => pattern.test(topic)).flatMap(([, sites]) => sites);
+}
+
+async function fetchGdcEvidence(topic) {
+  const primarySites = gdcPrimarySitesForTopic(topic);
+  if (primarySites.length === 0) {
+    return [];
+  }
+
+  const url = new URL(GDC_PROJECTS_URL);
+  url.searchParams.set(
+    "filters",
+    JSON.stringify({ op: "in", content: { field: "primary_site", value: primarySites } })
+  );
+  url.searchParams.set("size", "100");
+  url.searchParams.set("fields", "project_id,name,primary_site,disease_type");
+
+  const data = await fetchJson(url, { headers: PUBLIC_SOURCE_HEADERS });
+  const projects = data.data?.hits ?? [];
+  const exactSiteProjects = projects.filter((project) => {
+    const sites = project.primary_site ?? [];
+    return sites.length === 1 && primarySites.includes(sites[0]);
+  });
+  const broaderProjects = projects.filter((project) => !exactSiteProjects.includes(project));
+  const orderedProjects = [...exactSiteProjects, ...broaderProjects].slice(0, 5);
+
+  return orderedProjects.map((project) => ({
+    id: `gdc:${project.project_id}`,
+    name: project.name || project.project_id,
+    description: `${(project.primary_site ?? []).join(", ")} :: ${(project.disease_type ?? []).slice(0, 2).join(", ")}`,
+    project_id: project.project_id,
+    primary_site: project.primary_site ?? [],
+    source: "GDC",
+    url: `https://portal.gdc.cancer.gov/projects/${project.project_id}`
   }));
 }
 
@@ -529,34 +753,64 @@ async function fetchNzLegislationEvidence(topic) {
 }
 
 async function buildEvidencePack(topic, onEvent) {
-  onEvent?.(`pubmed search :: ${topic}`);
-  const [pubmed, openTargets, reactome, clinicalTrials, nzLegislation] = await Promise.all([
-    fetchPubMedEvidence(topic).catch(() => []),
-    fetchOpenTargetsEvidence(topic).catch(() => []),
-    fetchReactomeEvidence(topic).catch(() => []),
-    fetchClinicalTrialsEvidence(topic).catch(() => []),
-    fetchNzLegislationEvidence(topic).catch(() => [])
-  ]);
-  onEvent?.(`pubmed hits :: ${pubmed.length}`);
-  onEvent?.(`open targets hits :: ${openTargets.length}`);
-  onEvent?.(`reactome hits :: ${reactome.length}`);
-  onEvent?.(`clinical trials hits :: ${clinicalTrials.length}`);
+  const sourceRequests = [
+    { key: "pubmed", label: "pubmed", fetch: () => fetchPubMedEvidence(topic) },
+    { key: "open_targets", label: "open targets", fetch: () => fetchOpenTargetsEvidence(topic) },
+    { key: "reactome", label: "reactome", fetch: () => fetchReactomeEvidence(topic) },
+    { key: "clinical_trials", label: "clinical trials", fetch: () => fetchClinicalTrialsEvidence(topic) },
+    { key: "cbioportal", label: "cBioPortal", fetch: () => fetchCbioPortalEvidence(topic) },
+    { key: "depmap", label: "DepMap", fetch: () => fetchDepMapEvidence(topic) },
+    { key: "chembl", label: "ChEMBL", fetch: () => fetchChemblEvidence(topic) },
+    { key: "civic", label: "CIViC", fetch: () => fetchCivicEvidence(topic) },
+    { key: "gdc", label: "GDC", fetch: () => fetchGdcEvidence(topic) }
+  ];
+
   if (process.env.NZ_LEGISLATION_API_KEY) {
-    onEvent?.(`nz legislation hits :: ${nzLegislation.length}`);
+    sourceRequests.push({
+      key: "nz_legislation",
+      label: "nz legislation",
+      fetch: () => fetchNzLegislationEvidence(topic)
+    });
   }
+
+  const sourceResults = await Promise.all(
+    sourceRequests.map(async ({ key, label, fetch: fetchSource }) => {
+      try {
+        const items = await fetchSource();
+        onEvent?.(`${label} hits :: ${items.length}`);
+        return { key, items };
+      } catch (error) {
+        const message = error instanceof Error ? error.message : String(error);
+        onEvent?.(`${label} error :: ${message}`);
+        return { key, items: [], error: message };
+      }
+    })
+  );
+
+  const sources = Object.fromEntries(sourceResults.map(({ key, items }) => [key, items]));
+  const sourceErrors = Object.fromEntries(
+    sourceResults.filter(({ error }) => error).map(({ key, error }) => [key, error])
+  );
 
   return {
     topic,
     retrieved_at: new Date().toISOString(),
-    pubmed,
-    open_targets: openTargets,
-    reactome,
-    clinical_trials: clinicalTrials,
-    nz_legislation: nzLegislation
+    pubmed: sources.pubmed ?? [],
+    open_targets: sources.open_targets ?? [],
+    reactome: sources.reactome ?? [],
+    clinical_trials: sources.clinical_trials ?? [],
+    cbioportal: sources.cbioportal ?? [],
+    depmap: sources.depmap ?? [],
+    chembl: sources.chembl ?? [],
+    civic: sources.civic ?? [],
+    gdc: sources.gdc ?? [],
+    nz_legislation: sources.nz_legislation ?? [],
+    source_errors: sourceErrors
   };
 }
 
 function renderEvidence(evidence) {
+  const sourceErrors = evidence.source_errors ?? {};
   const pubmedLines =
     evidence.pubmed.length === 0
       ? ["no results"]
@@ -592,8 +846,42 @@ function renderEvidence(evidence) {
           item.title,
           `${item.legislation_type || "type unknown"} :: ${item.id}`
         ]);
+  const cbioportalLines =
+    (evidence.cbioportal ?? []).length === 0
+      ? ["no results"]
+      : evidence.cbioportal.flatMap((item) => [
+          item.name,
+          `${item.sample_count ?? "?"} samples :: ${item.cancer_type || item.id}`
+        ]);
+  const depmapLines =
+    (evidence.depmap ?? []).length === 0
+      ? ["no results"]
+      : evidence.depmap.flatMap((item) => [item.name, `${item.release} :: ${item.release_date}`]);
+  const chemblLines =
+    (evidence.chembl ?? []).length === 0
+      ? ["no results"]
+      : evidence.chembl.flatMap((item) => [item.name, item.description || item.target_chembl_id]);
+  const civicLines =
+    (evidence.civic ?? []).length === 0
+      ? ["no results"]
+      : evidence.civic.flatMap((item) => [
+          item.name,
+          `${item.evidence_type || "evidence"} :: Level ${item.evidence_level || "?"} :: ${item.evidence_direction || "direction unknown"}`
+        ]);
+  const gdcLines =
+    (evidence.gdc ?? []).length === 0
+      ? ["no results"]
+      : evidence.gdc.flatMap((item) => [
+          item.name,
+          `${item.project_id} :: ${(item.primary_site ?? []).join(", ")}`
+        ]);
 
   console.log(`\n${color(`Source pack for ${evidence.topic}`, ANSI.green)}\n`);
+  if (Object.keys(sourceErrors).length > 0) {
+    const errorLines = Object.entries(sourceErrors).map(([source, message]) => `${source} :: ${message}`);
+    console.log(color(makePanel("Source status", errorLines, terminalWidth()), ANSI.red));
+    console.log("");
+  }
   console.log(renderEvidencePanels("PubMed", pubmedLines, "Open Targets", targetLines));
   console.log("");
   console.log(renderEvidencePanels("Reactome", reactomeLines, "ClinicalTrials.gov", trialLines));
@@ -601,6 +889,12 @@ function renderEvidence(evidence) {
     console.log("");
     console.log(renderSingleColumn("NZ Legislation", legislationLines, terminalWidth()));
   }
+  console.log("");
+  console.log(renderEvidencePanels("cBioPortal", cbioportalLines, "DepMap", depmapLines));
+  console.log("");
+  console.log(renderEvidencePanels("ChEMBL", chemblLines, "CIViC", civicLines));
+  console.log("");
+  console.log(renderSingleColumn("GDC", gdcLines, terminalWidth()));
   console.log("");
 }
 
@@ -647,6 +941,11 @@ function evidenceDetailsForHypothesis(hypothesis, evidence) {
   const openTargets = new Map((evidence?.open_targets ?? []).map((item) => [item.id, item]));
   const reactome = new Map((evidence?.reactome ?? []).map((item) => [item.id, item]));
   const clinicalTrials = new Map((evidence?.clinical_trials ?? []).map((item) => [item.id, item]));
+  const cbioportal = new Map((evidence?.cbioportal ?? []).map((item) => [item.id, item]));
+  const depmap = new Map((evidence?.depmap ?? []).map((item) => [item.id, item]));
+  const chembl = new Map((evidence?.chembl ?? []).map((item) => [item.id, item]));
+  const civic = new Map((evidence?.civic ?? []).map((item) => [item.id, item]));
+  const gdc = new Map((evidence?.gdc ?? []).map((item) => [item.id, item]));
   const nzLegislation = new Map((evidence?.nz_legislation ?? []).map((item) => [item.id, item]));
 
   return refs.map((ref) => {
@@ -668,6 +967,31 @@ function evidenceDetailsForHypothesis(hypothesis, evidence) {
     if (clinicalTrials.has(ref)) {
       const item = clinicalTrials.get(ref);
       return `ClinicalTrials.gov :: ${item.title}${item.phase ? ` (${item.phase})` : ""}`;
+    }
+
+    if (cbioportal.has(ref)) {
+      const item = cbioportal.get(ref);
+      return `cBioPortal :: ${item.name}${item.sample_count ? ` (${item.sample_count} samples)` : ""}`;
+    }
+
+    if (depmap.has(ref)) {
+      const item = depmap.get(ref);
+      return `DepMap :: ${item.name} (${item.release})`;
+    }
+
+    if (chembl.has(ref)) {
+      const item = chembl.get(ref);
+      return `ChEMBL :: ${item.name}`;
+    }
+
+    if (civic.has(ref)) {
+      const item = civic.get(ref);
+      return `CIViC :: ${item.name} (${item.evidence_level || "level unknown"})`;
+    }
+
+    if (gdc.has(ref)) {
+      const item = gdc.get(ref);
+      return `GDC :: ${item.name}`;
     }
 
     if (nzLegislation.has(ref)) {
@@ -1149,6 +1473,28 @@ async function selectWithArrows(options, config = {}) {
 }
 
 async function callModel(topic, apiKey, evidence) {
+  const model = configuredModel();
+  const requestBody = {
+    model,
+    messages: [
+      {
+        role: "system",
+        content:
+          "You are a careful research assistant. Be explicit, structured, and avoid unsupported certainty."
+      },
+      {
+        role: "user",
+        content: buildPrompt(topic, evidence)
+      }
+    ]
+  };
+
+  if (!model.endsWith(":free")) {
+    requestBody.response_format = {
+      type: "json_object"
+    };
+  }
+
   const response = await fetch(OPENROUTER_URL, {
     method: "POST",
     headers: {
@@ -1157,23 +1503,7 @@ async function callModel(topic, apiKey, evidence) {
       "HTTP-Referer": "https://github.com/michaeltrilford/Remission",
       "X-Title": "Remission"
     },
-    body: JSON.stringify({
-      model: MODEL,
-      messages: [
-        {
-          role: "system",
-          content:
-            "You are a careful research assistant. Be explicit, structured, and avoid unsupported certainty."
-        },
-        {
-          role: "user",
-          content: buildPrompt(topic, evidence)
-        }
-      ],
-      response_format: {
-        type: "json_object"
-      }
-    })
+    body: JSON.stringify(requestBody)
   });
 
   if (!response.ok) {
@@ -1207,7 +1537,7 @@ async function propose(topic, options) {
     evidenceLogs.push(message);
     loader.update(`Remission is gathering public source material... ${message}`);
   });
-  loader.update("Remission is talking with Nemotron 3 using your configured model...");
+  loader.update(`Remission is generating with ${configuredModel()}...`);
   const result = await callModel(topic, apiKey, evidence);
   loader.update(`Remission is ranking ${result.hypotheses.length} candidate paths...`);
   loader.stop(color("Ready :: Path map prepared", ANSI.green));
