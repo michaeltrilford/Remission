@@ -4,12 +4,15 @@
   "private": true,
   "description": "CLI discovery agent for cancer intervention hypothesis generation.",
   "type": "module",
+  "bin": {
+    "remission": "./src/cli.js"
+  },
   "scripts": {
-    "start": "node src/remission.js start",
-    "propose": "node src/remission.js propose",
-    "evidence": "node src/remission.js evidence",
+    "start": "node src/cli.js start",
+    "propose": "node src/cli.js propose",
+    "evidence": "node src/cli.js evidence",
     "review": "node review/server.js",
-    "check": "node --check src/remission.js"
+    "check": "node --check src/remission.js && node --check src/cli.js"
   },
   "dependencies": {
     "esbuild": "^0.27.3",

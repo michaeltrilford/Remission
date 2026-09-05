@@ -22,7 +22,6 @@ const PUBLIC_SOURCE_HEADERS = {
   Accept: "application/json",
   "User-Agent": "Remission/0.1 (+https://github.com/michaeltrilford/Remission)"
 };
-const NCI_CANCER_TYPES_URL = "https://www.cancer.gov/types";
 const STARTER_TOPICS = [
   "Lung Cancer",
   "Breast Cancer",
@@ -37,14 +36,16 @@ const STARTER_TOPICS = [
 ];
 const ANSI = {
   reset: "\x1b[0m",
-  // Muibook dark theme: grey surfaces/text with blue, green, orange, and red states.
-  dim: "\x1b[38;2;170;170;170m", // grey-400
-  bright: "\x1b[1;38;2;242;242;242m", // grey-50
-  border: "\x1b[38;2;102;102;102m", // grey-600
-  green: "\x1b[38;2;1;191;53m", // green-500
-  cyan: "\x1b[38;2;89;175;244m", // blue-500
-  amber: "\x1b[38;2;246;163;34m", // orange-500
-  red: "\x1b[38;2;226;73;71m" // red-500
+  // RemissionApp-inspired theme: forest greens with blue interaction and warm states.
+  dim: "\x1b[38;2;148;174;151m", // sage-300
+  bright: "\x1b[1;38;2;239;246;237m", // leaf-50
+  border: "\x1b[38;2;29;127;50m", // forest-600
+  green: "\x1b[38;2;103;211;116m", // leaf-400
+  cyan: "\x1b[38;2;95;167;245m", // status blue
+  amber: "\x1b[38;2;231;184;89m", // warm amber
+  red: "\x1b[38;2;216;98;93m", // muted reject red
+  key: "\x1b[1;38;2;103;211;116m", // shortcut key
+  shortcutText: "\x1b[38;2;239;246;237m" // shortcut label
 };
 
 function loadEnvFile() {
@@ -82,9 +83,9 @@ function usage() {
 Remission CLI
 
 Usage:
-  node src/remission.js start
-  node src/remission.js propose "<topic>" [--api-key <key>] [--json]
-  node src/remission.js evidence "<topic>" [--json]
+  node src/cli.js start
+  node src/cli.js propose "<topic>" [--api-key <key>] [--json]
+  node src/cli.js evidence "<topic>" [--json]
   npm run start
   npm run propose -- "<topic>" [--api-key <key>] [--json]
   npm run evidence -- "<topic>" [--json]
@@ -107,6 +108,18 @@ function reviewAppUrl() {
 
 function color(text, value) {
   return `${value}${text}${ANSI.reset}`;
+}
+
+function shortcutFooter(...parts) {
+  return parts
+    .map((part) => {
+      if (typeof part === "string") {
+        return color(part, ANSI.dim);
+      }
+
+      return `${color(part.key, ANSI.key)} ${color(part.label, ANSI.shortcutText)}`;
+    })
+    .join(` ${color("|", ANSI.border)} `);
 }
 
 function stripAnsi(text) {
@@ -232,14 +245,6 @@ function renderEvidencePanels(leftTitle, leftLines, rightTitle, rightLines) {
   }
 
   return renderTwoColumn(leftTitle, leftLines, rightTitle, rightLines, twoColumnWidth);
-}
-
-async function showBootSplash() {
-  return;
-}
-
-async function showSignalAcquisition(topic) {
-  return topic;
 }
 
 function createLoader() {
@@ -1147,8 +1152,12 @@ async function runInteractivePicker(result, evidence) {
         color(`Remission paths for ${result.topic}`, ANSI.green),
         color("Pick a path with arrows and press Enter.", ANSI.dim)
       ],
-      footer: "Enter inspect  |  o open review page  |  q quit",
-      useAltScreen: true,
+      footer: shortcutFooter(
+        { key: "Enter", label: "inspect" },
+        { key: "o", label: "In-browser" },
+        { key: "q", label: "Quit" }
+      ),
+      useAltScreen: false,
       onKey(key, currentIndex) {
         if (key.toLowerCase() === "o") {
           return {
@@ -1244,43 +1253,46 @@ async function start(options) {
 }
 
 async function runStartMenu(options) {
-  const mode = await selectWithArrows(
-    [
-      {
-        label: "Generate research directions",
-        description: "Grounded in public biomedical source material",
-        value: "propose"
-      },
-      {
-        label: "View sources",
-        description: "Review retrieved source material before generating paths",
-        value: "evidence"
-      },
-      {
-        label: "Quit",
-        description: "Exit Remission",
-        value: "quit"
-      }
-    ],
-    {
-      header: [
-        color("REMISSION", ANSI.green),
-        "Discovery engine for cancer intervention paths.",
-        color("Use arrows, press Enter to select.", ANSI.dim)
+  while (true) {
+    const mode = await selectWithArrows(
+      [
+        {
+          label: "Generate research directions",
+          description: "Grounded in public biomedical source material",
+          value: "propose"
+        },
+        {
+          label: "View sources",
+          description: "Review retrieved source material before generating paths",
+          value: "evidence"
+        },
+        {
+          label: "Quit",
+          description: "Exit Remission",
+          value: "quit"
+        }
       ],
-      footer: "Navigator online",
-      useAltScreen: true
+      {
+        header: [
+          color("REMISSION", ANSI.green),
+          "Discovery engine for cancer intervention paths.",
+          color("Use arrows, press Enter to select.", ANSI.dim)
+        ],
+        useAltScreen: false
+      }
+    );
+
+    if (mode === "quit") {
+      return;
     }
-  );
 
-  if (mode === "quit") {
-    return;
-  }
-
-  const rl = readline.createInterface({ input, output });
-
-  try {
-    const topic = await selectTopic(rl);
+    const topic = await selectTopic();
+    if (topic === "quit") {
+      return;
+    }
+    if (topic === "back") {
+      continue;
+    }
     if (!topic) {
       throw new Error("Topic is required.");
     }
@@ -1291,12 +1303,11 @@ async function runStartMenu(options) {
     }
 
     await evidence(topic, options);
-  } finally {
-    rl.close();
+    return;
   }
 }
 
-async function selectTopic(rl) {
+async function selectTopic() {
   console.log("");
   const topicChoice = await selectWithArrows(
     [
@@ -1305,22 +1316,29 @@ async function selectTopic(rl) {
     ],
     {
       header: [
-        color("Select a starting topic", ANSI.cyan),
         color("Pick a common cancer type or enter your own.", ANSI.dim)
       ],
-      footer: "Choose a topic, or use Custom topic... for a specific query",
-      useAltScreen: true
+      footer: shortcutFooter("Choose a topic, or use Custom topic", { key: "b", label: "Back" }),
+      useAltScreen: false,
+      allowBack: true
     }
   );
 
+  if (topicChoice === "back") {
+    return "back";
+  }
+
   if (topicChoice === "quit") {
-    return "";
+    return "quit";
   }
 
   if (topicChoice === "custom") {
-    console.log(`\nReference: ${NCI_CANCER_TYPES_URL}`);
-    const customTopic = (await rl.question("Custom topic: ")).trim();
-    return customTopic;
+    const rl = readline.createInterface({ input, output });
+    try {
+      return (await rl.question("Custom topic: ")).trim();
+    } finally {
+      rl.close();
+    }
   }
 
   return topicChoice;
@@ -1368,20 +1386,47 @@ async function selectWithArrows(options, config = {}) {
   const header = config.header ?? [];
   const clearOnRender = config.clearOnRender ?? true;
   const useAltScreen = config.useAltScreen ?? false;
+  const allowBack = config.allowBack ?? false;
   const onKey = config.onKey ?? null;
 
   function render() {
     const headerLines = Array.isArray(header) ? header : [header];
-    const lines = options.flatMap((option, index) => {
-      const rendered = [`${index === selectedIndex ? "> " : "  "}${option.label}`];
+    const optionBlocks = options.map((option, index) => {
+      const selected = index === selectedIndex;
+      const marker = selected ? color(">", ANSI.green) : " ";
+      const label = selected ? color(option.label, ANSI.green) : option.label;
+      const rendered = [`${marker} ${label}`];
 
       if (option.description) {
         rendered.push(`  ${color(option.description, ANSI.dim)}`);
       }
 
-      rendered.push("");
+      if (index < options.length - 1) {
+        rendered.push("");
+      }
       return rendered;
     });
+    const reservedRows = headerLines.length + 1 + (footer ? 2 : 0);
+    const viewportRows = Math.max(1, (Number(output.rows) || 24) - reservedRows);
+    const optionRows = optionBlocks.reduce((total, block) => total + block.length, 0);
+    let visibleStart = 0;
+    let visibleEnd = optionBlocks.length;
+    let visibleRows = optionRows;
+
+    while (visibleRows > viewportRows && visibleStart < selectedIndex) {
+      visibleRows -= optionBlocks[visibleStart].length;
+      visibleStart += 1;
+    }
+
+    while (visibleRows > viewportRows && visibleEnd > selectedIndex + 1) {
+      visibleEnd -= 1;
+      visibleRows -= optionBlocks[visibleEnd].length;
+    }
+
+    let lines = optionBlocks.slice(visibleStart, visibleEnd).flat();
+    if (lines.length > viewportRows) {
+      lines = optionBlocks[selectedIndex].slice(0, viewportRows);
+    }
 
     const rendered = [...headerLines, "", ...lines];
     if (footer) {
@@ -1428,13 +1473,13 @@ async function selectWithArrows(options, config = {}) {
         return;
       }
 
-      if (key === "\u001b[A") {
+      if (key === "\u001b[A" || key === "\u001bOA") {
         selectedIndex = selectedIndex === 0 ? options.length - 1 : selectedIndex - 1;
         render();
         return;
       }
 
-      if (key === "\u001b[B") {
+      if (key === "\u001b[B" || key === "\u001bOB") {
         selectedIndex = selectedIndex === options.length - 1 ? 0 : selectedIndex + 1;
         render();
         return;
@@ -1447,6 +1492,11 @@ async function selectWithArrows(options, config = {}) {
 
       if (key.toLowerCase() === "q") {
         finish("quit");
+        return;
+      }
+
+      if (allowBack && key.toLowerCase() === "b") {
+        finish("back");
         return;
       }
 
@@ -1530,7 +1580,6 @@ async function propose(topic, options) {
   }
 
   const loader = createLoader();
-  await showSignalAcquisition(topic);
   loader.start("Remission is gathering public source material...");
   const evidenceLogs = [];
   const evidence = await buildEvidencePack(topic, (message) => {
@@ -1576,7 +1625,7 @@ async function evidence(topic, options) {
   renderEvidence(result);
 }
 
-async function main() {
+export async function main() {
   loadEnvFile();
 
   const [, , command, ...rawArgs] = process.argv;
@@ -1589,35 +1638,26 @@ async function main() {
   const { options, positionals } = parseArgs(rawArgs);
   const topic = positionals.join(" ").trim();
 
-  if (command === "start") {
-    await showBootSplash();
-  }
-
-  if (command === "start") {
-    await start(options);
-    return;
-  }
-
-  if (command === "propose") {
-    if (!topic) {
-      throw new Error("Missing topic. Example: npm run propose -- \"KRAS lung cancer\"");
+  const handlers = {
+    start: () => start(options),
+    propose: () => {
+      if (!topic) {
+        throw new Error("Missing topic. Example: npm run propose -- \"KRAS lung cancer\"");
+      }
+      return propose(topic, options);
+    },
+    evidence: () => {
+      if (!topic) {
+        throw new Error("Missing topic. Example: npm run evidence -- \"KRAS lung cancer\"");
+      }
+      return evidence(topic, options);
     }
-    await propose(topic, options);
-    return;
+  };
+  const handler = handlers[command];
+
+  if (!handler) {
+    throw new Error(`Unknown command: ${command}`);
   }
 
-  if (command === "evidence") {
-    if (!topic) {
-      throw new Error("Missing topic. Example: npm run evidence -- \"KRAS lung cancer\"");
-    }
-    await evidence(topic, options);
-    return;
-  }
-
-  throw new Error(`Unknown command: ${command}`);
+  await handler();
 }
-
-main().catch((error) => {
-  console.error(error.message);
-  process.exitCode = 1;
-});

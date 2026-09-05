@@ -22,6 +22,8 @@ Set up a local `.env` file in the repo root:
 # Local secrets only. Do not commit.
 OPENROUTER_API_KEY=sk-...
 REMISSION_REVIEW_APP_URL=https://remission-sigma.vercel.app
+# Optional. Defaults to the free Nemotron Lightning endpoint.
+REMISSION_MODEL=nvidia/nemotron-3.5-lightning:free
 # Optional. Enables NZ Legislation source retrieval.
 NZ_LEGISLATION_API_KEY=nzlapi-...
 ```
@@ -33,6 +35,16 @@ Then launch:
 ```bash
 npm run start
 ```
+
+The CLI can also be used directly:
+
+```bash
+npm run propose -- "Breast Cancer"
+npm run evidence -- "Breast Cancer"
+```
+
+The default model is the free Nemotron Lightning endpoint. To use a paid model, set
+`REMISSION_MODEL` to the desired OpenRouter model slug before running `propose`.
 
 ## Notes
 
@@ -55,6 +67,8 @@ Suggested sources:
 - [cBioPortal](https://www.cbioportal.org/)
 - [GDC / TCGA](https://portal.gdc.cancer.gov/)
 - [DepMap](https://depmap.org/portal/)
+- [ChEMBL](https://www.ebi.ac.uk/chembl/)
+- [CIViC](https://civicdb.org/)
 - [Human Protein Atlas](https://www.proteinatlas.org/humanproteome/cancer)
 
 Use only source material whose terms, licensing, and access conditions fit your intended use.
